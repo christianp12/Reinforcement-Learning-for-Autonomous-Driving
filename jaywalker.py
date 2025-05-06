@@ -538,17 +538,23 @@ class QAgent():
             return self.greedy_arglexmax(Q)
 
 
+    # selects the action with the maximum Q value and applies a priority hierarchy 
     def greedy_arglexmax(self, Q):
         permissible_actions = self.permissible_actions
 
+        # filtering action based on threshold of first Q value (collision risk)
+        # 0.7 is a threshold to filter out actions with low Q values
         mask = (Q[:, 0] >= -0.7)
 
+        # if no action is above the threshold -> refine actions
         if not torch.any(mask):
             permissible_actions = self.refine_actions(permissible_actions, Q[:,0])
         
+        # else, update permissible actions
         else:
             permissible_actions = permissible_actions[mask]
 
+        # update permissible actions based on second Q value
         permissible_actions = self.refine_actions(permissible_actions, Q[permissible_actions,1])
         
         return permissible_actions[Q[permissible_actions,2].max(0)[1]]
