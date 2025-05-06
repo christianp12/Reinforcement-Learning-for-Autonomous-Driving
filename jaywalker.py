@@ -544,6 +544,7 @@ class QAgent():
 
         # filtering action based on threshold of first Q value (collision risk)
         # 0.7 is a threshold to filter out actions with low Q values
+        # negative values penalize collisions
         mask = (Q[:, 0] >= -0.7)
 
         # if no action is above the threshold -> refine actions
@@ -560,6 +561,7 @@ class QAgent():
         return permissible_actions[Q[permissible_actions,2].max(0)[1]]
 
 
+    # epsilon greedy action selection
     def select_action(self, state):
         if random.random() <= self.epsilon:
             return self.env.random_action()
@@ -570,6 +572,7 @@ class QAgent():
             return action
 
 
+    # recalculates the permissible actions based on the Q values
     def refine_actions(self, permissible_actions, q):
         lower_bound = q.max(0)[0]
         lower_bound -= self.slack * torch.abs(lower_bound)
@@ -578,11 +581,14 @@ class QAgent():
         return permissible_actions[mask]
 
  
+    # alternative action selection method
+    # combines the three Q values with priority hierarchy with safety first
     def arglexmax(self, Q):
         permissible_actions = self.permissible_actions
 
-        mask = (Q[:, 0] >= -0.7)
+        mask = (Q[:, 0] >= -0.7) # safety treshold
 
+        # if no action is above the threshold -> refine actions for both Q1 and Q2
         if not torch.any(mask):
             permissible_actions = self.refine_actions(permissible_actions, Q[:,0])
         
@@ -612,9 +618,13 @@ class QAgent():
             permissible_actions = [a for a in permissible_actions if Q[a, i] >= lower_bound]
         """
 
+        # return a random action among the one remaining after filtering
         return random.choice(permissible_actions)
 
     
+    # controls the target model update rate
+    # lower values -> slower update rate but more stable
+    # higher values -> faster update rate but risk of divergence
     def update_target_model(self, tau):
         weights = self.model.state_dict()
         target_weights = self.target_model.state_dict()
@@ -622,11 +632,14 @@ class QAgent():
             target_weights[i] = weights[i] * tau + target_weights[i] * (1-tau)
         self.target_model.load_state_dict(target_weights)
     
-
+    # saves the best action for the given state
     def save_arglexmax(self, i):
         self.actions[i] = self.arglexmax(self.q_values[i,:])
 
 
+    # computes target Q values for the a batch of input states
+    # selects the best action for each state using greedy_arglexmax
+    # uses the target network to evaluate the selected actions
     def q_value_arrival_state(self, states):
         self.q_values = self.model(states)
         self.actions = torch.empty(len(states), device=device, dtype=torch.int64)
@@ -641,6 +654,9 @@ class QAgent():
         return self.target_model(states).gather(1,actions).squeeze()
     
     
+    
+    # breaks temporal correlations by random sampling 
+    # smooths the learning process preventing oscillations reusing past experiences
     def experience_replay(self):
         if len(self.memory) < self.train_start:
             return
@@ -652,9 +668,7 @@ class QAgent():
             self.action_batch[i] = batch[i][1]
             self.reward_batch[i,:] = batch[i][2]
             self.next_state_batch[i,:] = batch[i][3]
-            self.not_done_batch[i] = not batch[i][4]
-            
-        
+            self.not_done_batch[i] = not batch[i][4]        
         
         with torch.no_grad():
             self.next_state_values[self.not_done_batch, :] = self.q_value_arrival_state(self.next_state_batch[self.not_done_batch,:])
