@@ -132,57 +132,65 @@ class Jaywalker:
 
         self.reward_size = 3
 
+        # road length and width
         self.dim_x = 100
         self.dim_y = 10
 
+        # target position for the car
         self.goal = array([self.dim_x, self.dim_y/4])
 
+        # jaywalker position
         self.jaywalker = array([self.dim_x/2, self.dim_y/4])
+        # jaywalker radius (collision boundary around the pedestrian)
         self.jaywalker_r = 2
 
+        # collision box
         self.jaywalker_max = self.jaywalker + self.jaywalker_r
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
+        # CAR CONTROL
         #self.df = [-np.pi/9, -np.pi/18, 0, np.pi/18, np.pi/9]
-        self.df = [-np.pi/18, 0, np.pi/18]
-        self.a = [-5, 0, 5]
-        self.actions = [p for p in itertools.product(self.df, self.a)]
+        self.df = [-np.pi/18, 0, np.pi/18]  # steering angle (small left, straight, small right)
+        self.a = [-5, 0, 5] # acceleration (deceleration, no acceleration, acceleration)
+        self.actions = [p for p in itertools.product(self.df, self.a)] # matrix of all possible actions
 
         self.num_df_actions = len(self.df)
         self.num_a_actions = len(self.a)
 
-        self.state_size = 5
-        self.action_size = self.num_df_actions * self.num_a_actions
+        self.state_size = 5 # [car position, distance from jaywalker, angle w.r.t. jaywalker, speed, steering angle]
+        self.action_size = self.num_df_actions * self.num_a_actions # number of actions
 
-        self.max_iterations = 100
+        self.max_iterations = 100 # episode terminates after this number of steps
 
-        self.car = Car(array([0.0,2.5]))
+        self.car = Car(array([0.0,2.5])) # car starting position (x,y)
 
         self.counter_iterations = 0
 
         #self.prev_center_disance = np.abs(self.car.position[1] - self.goal[1])
-        self.prev_target_distance = np.linalg.norm(self.car.front - self.goal)
+        self.prev_target_distance = np.linalg.norm(self.car.front - self.goal) # euclidean distance from target
 
-        self.noise = 1e-5
-        self.sight = 40
+        self.noise = 1e-5 # small random perdurbation for exploration
+        self.sight = 40 # sight range: how far the car can see in front of it
 
         self.scale_factor = 100
 
 
-    def collision_with_jaywalker(self):
-
+    # CHECK FOR COLLISION:
+    def collision_with_jaywalker(self): 
 
         front = np.maximum(self.car.front, self.car.prev_front)
         prev = np.minimum(self.car.front, self.car.prev_front)
 
         denom = front - prev + self.noise
 
+        # projects the jaywalker bounding box on the car's motion direction
         upper = (self.jaywalker_max - prev) / denom
         lower = (self.jaywalker_min - prev) / denom
 
         scalar_upper = np.min(upper)
         scalar_lower = np.max(lower)
         
+        # check if jaywalker bounding box overlaps with the car's motion direction [0,1]
         if scalar_upper >= 0 and scalar_lower <= 1 and scalar_lower <= scalar_upper:
                 return True
         
@@ -215,12 +223,14 @@ class Jaywalker:
         terminated = False
         completed = False
 
-        if self.collision_with_jaywalker(): # collision with jaywalker
+        # collision with jaywalker
+        if self.collision_with_jaywalker(): 
             reward[0] = -10
             terminated = True
 
 
         # distance from target
+        # rewards as long as the car is moving towards the target
         reward[1] = (self.car.position[0] - self.car.prev_position[0])/self.scale_factor
 
         # accept surpassing the goal, terminate
@@ -230,13 +240,14 @@ class Jaywalker:
             terminated = True
 
 
-        # collision with borders
+        # collision with borders of the road -> out of bounds
         if self.car.front[1] > self.dim_y or self.car.front[1] < 0 or self.car.back[1] > self.dim_y or self.car.back[1] < 0 or self.car.position[0] < 0 or self.car.front[0] < 0:
             reward[2] = -1000
             terminated = True
 
         # distance from center of own lane
         else:
+            # computes a distance-based penalty to encourage the car to stay centered in its lane
             reward[2] = -np.abs(self.car.position[1] - self.goal[1])
 
         reward[2] /= self.scale_factor * 10
