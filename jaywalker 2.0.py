@@ -144,9 +144,17 @@ class Jaywalker:
         # jaywalker radius (collision boundary around the pedestrian)
         self.jaywalker_r = 2
 
-        # collision box
+        # other car
+        self.other_car = array([self.dim_x/2, self.goal[1] + 2])  # other lane
+        self.other_car_r = 1.0  # radius for collision detection
+
+        # jaywalker collision box
         self.jaywalker_max = self.jaywalker + self.jaywalker_r
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
+
+        # other car collision box
+        self.other_car_max = self.other_car + self.other_car_r
+        self.other_car_min = self.other_car - self.other_car_r
 
         # CAR CONTROL
         #self.df = [-np.pi/9, -np.pi/18, 0, np.pi/18, np.pi/9]
@@ -197,6 +205,35 @@ class Jaywalker:
         
         return False
 
+    # PREDICT IF A COLLISION WOULD HAPPEN IF THE CAR CHANGES LANE
+    def would_collide(self, df, a):
+        # clone the car's current state
+        test_car = Car(self.car.position.copy())
+        test_car.v = self.car.v
+        test_car.phi = self.car.phi
+        test_car.beta = self.car.beta
+
+        # simulate move
+        test_car.move(df, a)
+
+        front = np.maximum(test_car.front, test_car.prev_front)
+        prev = np.minimum(test_car.front, test_car.prev_front)
+
+        denom = front - prev + self.noise
+
+        # projects the jaywalker bounding box on the car's motion direction
+        upper = (self.jaywalker_max - prev) / denom
+        lower = (self.jaywalker_min - prev) / denom
+
+        scalar_upper = np.min(upper)
+        scalar_lower = np.max(lower)
+
+        # check if jaywalker bounding box overlaps with the car's motion direction [0,1]
+        if scalar_upper >= 0 and scalar_lower <= 1 and scalar_lower <= scalar_upper:
+            return True
+
+        return False
+ 
 
     # return the inverse of the distance from the jaywalker and the angle w.r.t to it
     def vision(self):
@@ -240,6 +277,11 @@ class Jaywalker:
 
         # collision with jaywalker
         if self.collision_with_jaywalker(): 
+            reward[0] = -10
+            terminated = True
+
+        # collision with other car
+        if self.would_collide():
             reward[0] = -10
             terminated = True
 
