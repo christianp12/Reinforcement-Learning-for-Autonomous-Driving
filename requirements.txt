@@ -1,0 +1,12 @@
+# Core libraries
+numpy
+qqdm
+matplotlib
+
+# PyTorch
+torch>=2.0.0
+
+# Note: linalg.solve è disponibile da torch 1.9+, ma torch>=2.0 è raccomandato
+
+# Altre dipendenze standard non richieste nel file:
+# - os, time, random, math, itertools, multiprocessing, sys sono built-in

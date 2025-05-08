@@ -2,6 +2,9 @@ import numpy as np
 from qqdm import qqdm
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.transforms as transforms
+import matplotlib.image as mpimg
+
 import os, time
 
 import torch.optim as optim
@@ -132,6 +135,10 @@ class Jaywalker:
         self.brake_start = 15.0   # da questa distanza inizi a frenare
         self.brake_max   = -5.0   # accelerazione di frenata massima
 
+        if not hasattr(self, 'car_img'):
+            self.car_img = mpimg.imread("car/carontop.png")  # ← metti il file nella stessa cartella
+
+
 
         self.reward_size = 3
 
@@ -177,6 +184,9 @@ class Jaywalker:
         self.sight = 40
 
         self.scale_factor = 100
+        #per incentivare a restare in corsia
+        self.time_in_lane = 0
+
 
 
     def collision_with_jaywalker(self):
@@ -242,17 +252,19 @@ class Jaywalker:
                 completed = True
             terminated = True
 
+        lane_center = self.goal[1]
+        lane_range = self.lane_width / 2
+
 
         # collision with borders
         if self.car.front[1] > self.dim_y or self.car.front[1] < 0 or self.car.back[1] > self.dim_y or self.car.back[1] < 0 or self.car.position[0] < 0 or self.car.front[0] < 0:
-            reward[2] = -1000
+            reward[2] = -1
             terminated = True
 
-        # distance from center of own lane
-        else:
-            reward[2] = -np.abs(self.car.position[1] - self.goal[1])
-
-        reward[2] /= self.scale_factor * 10
+        # # distance from center of own lane
+        # else:
+        #     reward[2] = max(0, 1 - np.abs(self.car.position[1] - lane_center) / lane_range)
+        #     reward[2] /= self.scale_factor
 
 
         inv_distance, angle = self.vision()
@@ -293,9 +305,19 @@ class Jaywalker:
             if a < 0:
                 reward[0] += 1   # premio per frenare in prossimità
             elif a > 0:
-                reward[0] -= 2   # penalità per accelerare verso ostacolo
+                reward[0] -= 1   # penalità per accelerare verso ostacolo
         
 
+        current_lane = min(range(len(self.lanes_y)),
+            key=lambda i: abs(self.car.position[1] - self.lanes_y[i]))
+        preferred_lane = self.lanes_y.index(self.goal[1])
+
+        if current_lane == preferred_lane:
+            self.time_in_lane += 1
+            reward[2] = self.time_in_lane * 0.01
+        else:
+            self.time_in_lane = 0
+            reward[2] = -0.5
 
 
 
@@ -307,7 +329,7 @@ class Jaywalker:
 
         for obs in self.obstacles:
             if np.linalg.norm(self.car.front - obs['pos']) < obs['r']:
-                reward[0] = -10
+                reward[0] = -1
                 terminated = True
 
 
@@ -318,7 +340,7 @@ class Jaywalker:
         #MODIFICHE PER AGGIUNTA DINAMICA DI OSTACOLI
         self.obstacles = []
         for _ in range(random.randint(1, self.max_obstacles)):  
-            lane = random.choice(self.lanes_y)
+            lane = self.lanes_y[1] #random.choice(self.lanes_y)
             speed = random.uniform(0.1, 0.5)  # velocità relativa
             pos_x = random.uniform(self.car.position[0]+10, self.dim_x)
             self.obstacles.append({'type':'car', 'pos':array([pos_x, lane]), 'r':2.0, 'v':speed})
@@ -390,14 +412,33 @@ class Jaywalker:
             circle_o = plt.Circle(obs['pos'], obs['r'], color=c, alpha=0.5)
             plt.gca().add_patch(circle_o)
 
-        
-        car_circle = plt.Circle(self.car.position, radius=1.5, color='blue', alpha=0.8)
-        plt.gca().add_patch(car_circle)
+        car = self.car
+        car_length = 4.0
+        car_width = 4.0
+        arg = car.phi + car.beta
+
+# Coordinate per posizionare l'immagine
+        extent = [
+            car.position[0] - car_length / 2,
+            car.position[0] + car_length / 2,
+            car.position[1] - car_width / 2,
+            car.position[1] + car_width / 2
+        ]
+
+# Trasformazione per ruotare l'immagine
+        img_transform = transforms.Affine2D().rotate_around(
+            car.position[0], car.position[1], arg
+        ) + plt.gca().transData
+
+# Mostra immagine dell’auto
+        plt.imshow(self.car_img, extent=extent, transform=img_transform, zorder=5)
+
+
 
         blue_patch = mpatches.Patch(color='blue', label='Your Car')
         red_patch = mpatches.Patch(color='red', label='Jaywalker')
         orange_patch = mpatches.Patch(color='orange', label='Obstacle Car')
-        plt.legend(handles=[blue_patch, red_patch, orange_patch])
+        #plt.legend(handles=[blue_patch, red_patch, orange_patch])
         
         plt.xlim(-1, self.dim_x+1)
         plt.ylim(-1, self.dim_y+1)
