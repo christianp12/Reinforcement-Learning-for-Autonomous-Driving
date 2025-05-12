@@ -32,10 +32,10 @@ torch.set_num_threads(num_cores) # Intra-op parallelism
 
 
 ######## SET DEVICE ######################
-if torch.cuda.is_available():
-    device = torch.device("cuda:0")
-else:
-    device = "cpu"
+#if torch.cuda.is_available():
+#    device = torch.device("cuda:0")
+#else:
+device = "cpu"
 #########################################
 
 
@@ -1027,6 +1027,8 @@ if __name__ == "__main__":
 
     network_type = sys.argv[1]
 
+    # print used device
+    print(f"Device: {device}")
     #print(f"PyTorch is using: {torch.cuda.get_device_name(0)}")  # Should show your NVIDIA GPU
     #print(f"CUDA available: {torch.cuda.is_available()}")  # Must be True
 
