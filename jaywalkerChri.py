@@ -1,6 +1,10 @@
 import numpy as np
 from qqdm import qqdm
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.transforms as transforms
+import matplotlib.image as mpimg
+
 import os, time
 
 import torch.optim as optim
@@ -129,6 +133,11 @@ class Car:
 class Jaywalker:
 
     def __init__(self):
+
+        # set car image
+        if not hasattr(self, 'car_img'):
+            self.car_img = mpimg.imread("car/carontop.png")  # ← metti il file nella stessa cartella
+
 
         self.reward_size = 3
 
@@ -262,7 +271,9 @@ class Jaywalker:
 
             vision_data.append((inv_distance))
 
-        return inv_distance, angle 
+        # Replace inv_distance and angle with vision_data
+        #return inv_distance, angle 
+        return vision_data
 
 
     def step(self, action):
@@ -281,7 +292,7 @@ class Jaywalker:
             terminated = True
 
         # collision with other car
-        if self.would_collide():
+        if self.would_collide(df, a):
             reward[0] = -10
             terminated = True
 
@@ -310,13 +321,12 @@ class Jaywalker:
         reward[2] /= self.scale_factor * 10
 
 
+        # substitute inv_distance and angle with vision_data
         #inv_distance, angle = self.vision()
         #state = array([self.car.position[1], inv_distance, angle, self.car.v, self.car.beta]) # self.car.phi])
-
-        # substitute inv_distance and angle with vision_data
-        vision_data = self.vision()
+        vision_data = np.array(self.vision(), dtype=np.float32)
         state = np.concatenate(([self.car.position[1]], vision_data, [self.car.v, self.car.beta]))
-
+        state = torch.tensor(state, dtype=torch.float32).to(device)
 
         self.counter_iterations += 1
         truncated = False
@@ -332,12 +342,14 @@ class Jaywalker:
         self.car.reset(array([0.0,2.5]))
         self.counter_iterations = 0
 
+        # substitute inv_distance and angle with vision_data
         #inv_distance, angle = self.vision()
         #return array([self.car.position[1], inv_distance, angle, self.car.v, self.car.phi])
 
-        # substitute inv_distance and angle with vision_data
-        vision_data = self.vision()
+        vision_data = np.array(self.vision(), dtype=np.float32)
         state = np.concatenate(([self.car.position[1]], vision_data, [self.car.v, self.car.beta]))
+        state = torch.tensor(state, dtype=torch.float32).to(device)
+        return state
 
     def random_action(self):
         return int(np.floor(random.random() * self.action_size))
@@ -345,6 +357,70 @@ class Jaywalker:
 
     def __str__(self):
         return "jaywalker"
+    
+    def render(self):
+        plt.clf()
+        ax = plt.gca()
+        road = mpatches.Rectangle((0, 0), self.dim_x, self.dim_y,
+                                  facecolor='black', edgecolor='none')
+        ax.add_patch(road)
+
+        gx = self.goal[0]
+        ax.plot([gx, gx], [0, self.dim_y],
+            color='lime', linewidth=2,
+            linestyle=(0, (5, 5)),
+            label='Finish')
+
+        # 2) linee di bordo continue – bianche
+        plt.plot([0, self.dim_x], [0, 0], color='white', linewidth=2)
+        plt.plot([0, self.dim_x], [self.dim_y, self.dim_y], color='white', linewidth=2)
+
+        # 3) linea centrale tratteggiata – bianca
+        mid_y = self.dim_y / 2
+        plt.plot([0, self.dim_x], [mid_y, mid_y],
+                 color='white', linewidth=1,
+                 linestyle=(0, (10, 10))) 
+
+        #PEDONE COME CERCHIO ROSSO
+        circle_j = plt.Circle(self.jaywalker, self.jaywalker_r, color='red', alpha=0.5)
+        plt.gca().add_patch(circle_j)
+
+        #GLI OSTACOLI POSSONO ESSERE MACCHINE (ARANCIONI)
+        for obs in getattr(self, 'obstacles', []):
+            c = 'orange' if obs['type']=='car' else 'green'
+            circle_o = plt.Circle(obs['pos'], obs['r'], color=c, alpha=0.5)
+            plt.gca().add_patch(circle_o)
+
+        car = self.car
+        car_length = 4.0
+        car_width = 4.0
+        arg = car.phi + car.beta
+
+        # Coordinate per posizionare l'immagine
+        extent = [
+            car.position[0] - car_length / 2,
+            car.position[0] + car_length / 2,
+            car.position[1] - car_width / 2,
+            car.position[1] + car_width / 2
+        ]
+
+        # Trasformazione per ruotare l'immagine
+        img_transform = transforms.Affine2D().rotate_around(
+            car.position[0], car.position[1], arg
+        ) + plt.gca().transData
+
+        # Mostra immagine dell’auto
+        plt.imshow(self.car_img, extent=extent, transform=img_transform, zorder=5)
+
+
+        blue_patch = mpatches.Patch(color='blue', label='Your Car')
+        red_patch = mpatches.Patch(color='red', label='Jaywalker')
+        orange_patch = mpatches.Patch(color='orange', label='Obstacle Car')
+        #plt.legend(handles=[blue_patch, red_patch, orange_patch])
+        
+        plt.xlim(-1, self.dim_x+1)
+        plt.ylim(-1, self.dim_y+1)
+        plt.pause(0.001)
 
 
 
@@ -762,6 +838,10 @@ class QAgent():
                 action = self.act(state.unsqueeze(0))
                 next_state, reward, terminated, truncated, completed = self.env.step(action)
 
+                #MODIFICHE PER VEDERE GLI OSTACOLI
+                #if step % 10 == 0:  
+                self.env.render()
+
                 done = terminated or truncated
                 
                 next_state = torch.tensor(next_state).to(device)
@@ -947,9 +1027,8 @@ if __name__ == "__main__":
 
     network_type = sys.argv[1]
 
-    import torch
-    print(f"PyTorch is using: {torch.cuda.get_device_name(0)}")  # Should show your NVIDIA GPU
-    print(f"CUDA available: {torch.cuda.is_available()}")  # Must be True
+    #print(f"PyTorch is using: {torch.cuda.get_device_name(0)}")  # Should show your NVIDIA GPU
+    #print(f"CUDA available: {torch.cuda.is_available()}")  # Must be True
 
     #p = Pool(32)
     if network_type == "lex":
