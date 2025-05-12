@@ -225,25 +225,39 @@ class Jaywalker:
         '''
         Check if the car collides with an obstacle
         '''
-        dist = np.linalg.norm(car.front - obs_pos)
-        return dist <= obs_r
+        front = np.maximum(self.car.front, self.car.prev_front)
+        prev = np.minimum(self.car.front, self.car.prev_front)
+
+        denom = front - prev + self.noise
+
+        # projects the car bounding box on the car's motion direction
+        upper = (self.other_car_max - prev) / denom
+        lower = (self.other_car_min - prev) / denom
+
+        scalar_upper = np.min(upper)
+        scalar_lower = np.max(lower)
+        
+        # check if other car bounding box overlaps with the car's motion direction [0,1]
+        if scalar_upper >= 0 and scalar_lower <= 1 and scalar_lower <= scalar_upper:
+                return True
+        
+        return False
 
     # PREDICT IF A COLLISION WOULD HAPPEN IF THE CAR CHANGES LANE
     def would_collide(self, df, a, max_horizon=10, delta_time=1.0):
         '''
-        Predicts if a collision would happen in the next few time steps
+        Predicts if a collision would happen in the next few time steps,
+        considering both the distance to other cars and the time needed
+        to return to the original lane after surpassing the jaywalker.
         '''
 
-        steps_ahead = int(self.sight / (self.car.v + obs['v'] + 1e-5))
-
-
-        # Clone the car's current state
+        # Clone ego car
         test_car = Car(self.car.position.copy())
         test_car.v = self.car.v
         test_car.phi = self.car.phi
         test_car.beta = self.car.beta
 
-        # Clone obstacle states
+        # Clone obstacles
         predicted_obstacles = []
         for obs in self.obstacles:
             distance = np.linalg.norm(obs['pos'] - self.car.position)
@@ -257,31 +271,56 @@ class Jaywalker:
             predicted_obstacles.append({
                 'pos': obs['pos'].copy(),
                 'r': obs['r'],
-                'v': obs['v']
+                'v': obs['v'],
+                'steps': steps
             })
 
         # Use max steps among all obstacles to simulate forward
         max_steps = max([obs['steps'] for obs in predicted_obstacles], default=5)
 
 
-        # Predict future positions for 'steps_ahead' steps
-        for _ in range(steps_ahead):
-            # Move test car
+        # calculate steps needed to return to the original lane
+        original_lane_y = self.goal[1]
+        current_lane_deviation = abs(test_car.position[1] - original_lane_y)
+        # if we are already not in the lane
+        if current_lane_deviation > 0.1:
+            steps_to_return = int(current_lane_deviation / (abs(test_car.v) +1)) 
+        else:
+            # if we are in our lane, estimate steps for full change and return
+            lane_change_distance = self.lane_width/2
+            steps_to_return = int(2*lane_change_distance / (abs(test_car.v) +1))
+
+        # add buffer steps
+        total_prediction_steps = min(max_horizon, steps_to_return+5)
+
+        for step in range(total_prediction_steps):
             test_car.move(df, a)
 
-            # Predict obstacle's future position (assuming stationary)
-            if self.check_collision_with_obs(test_car, self.jaywalker, self.jaywalker_r):
+            # Check jaywalker
+            if self.collision_with_jaywalker():
                 return True
 
-            # Predict dynamic obstacles
+            # Check collision with other obstacles
             for obs in predicted_obstacles:
-                if obs['steps'] <= 0:
-                    continue
-                obs['pos'][0] -= obs['v'] * delta_time
-                obs['steps'] -= 1
-
-                if self.check_collision_with_obs(test_car, obs['pos'], obs['r']):
+                # Predict obstacle's future position
+                obs_pos = obs['pos'].copy()
+                obs_pos[0] -= obs['v'] * (step + 1) * delta_time
+                
+                if self.check_collision_with_obs(test_car, obs_pos, obs['r']):
                     return True
+                
+        
+        # if we passed the jaywalker, check if we can return to the original lane
+        if test_car.position[0] > self.jaywalker[0] + self.jaywalker_r:
+            # Calculate distance to nearest obstacle in original lane
+            for obs in self.obstacles:
+                if abs(obs['pos'][1] - original_lane_y) < self.lane_width/2:  # If obstacle is in our lane
+                    distance_to_obstacle = obs['pos'][0] - test_car.position[0]
+                    time_to_collision = distance_to_obstacle / (test_car.v + obs['v'] + 1e-5)
+                    
+                    # If we don't have enough time to return to lane before hitting obstacle
+                    if time_to_collision < steps_to_return * delta_time:
+                        return True
 
         return False
  
@@ -358,13 +397,17 @@ class Jaywalker:
         if self.car.front[1] > self.dim_y or self.car.front[1] < 0 or self.car.back[1] > self.dim_y or self.car.back[1] < 0 or self.car.position[0] < 0 or self.car.front[0] < 0:
             reward[2] = -1000
             terminated = True
-
-        # distance from center of own lane
+        # penalize being outside of the original lane
         else:
-            # computes a distance-based penalty to encourage the car to stay centered in its lane
-            reward[2] = -np.abs(self.car.position[1] - self.goal[1])
+            original_lane_y = self.goal[1]
+            lane_half_width = self.lane_width / 2
+            # Check if car is still within its own lane
+            if not (original_lane_y - lane_half_width <= self.car.position[1] <= original_lane_y + lane_half_width):
+                reward[2] = -1.0  # fixed penalty for being outside own lane
+            else:
+                reward[2] = 0.0
 
-        reward[2] /= self.scale_factor * 10
+        reward[2] /= self.scale_factor
 
 
         # substitute inv_distance and angle with vision_data
