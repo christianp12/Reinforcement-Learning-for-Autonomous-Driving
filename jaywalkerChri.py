@@ -79,7 +79,7 @@ class Car:
         self.lf = 1 # front axle
         self.lr = 1 # rear axle
 
-        self.max_speed = 20.0
+        self.max_speed = 5
 
         self.reset(position)
 
@@ -144,6 +144,13 @@ class Jaywalker:
         # road length and width
         self.dim_x = 100
         self.dim_y = 10
+
+        # modifiche per aggiunta dinamica di ostacoli
+        self.n_lanes = 2
+        self.lane_width = self.dim_y / self.n_lanes
+        self.lanes_y = [self.lane_width/2 + i * self.lane_width for i in range(self.n_lanes)]
+        self.obstacles = []     # verrà popolato in reset()
+        self.max_obstacles = 1  # ad es., fino a 5 oggetti
 
         # target position for the car
         self.goal = array([self.dim_x, self.dim_y/4])
@@ -213,33 +220,68 @@ class Jaywalker:
                 return True
         
         return False
+    
+    def check_collision_with_obs(self, car, obs_pos, obs_r):
+        '''
+        Check if the car collides with an obstacle
+        '''
+        dist = np.linalg.norm(car.front - obs_pos)
+        return dist <= obs_r
 
     # PREDICT IF A COLLISION WOULD HAPPEN IF THE CAR CHANGES LANE
-    def would_collide(self, df, a):
-        # clone the car's current state
+    def would_collide(self, df, a, max_horizon=10, delta_time=1.0):
+        '''
+        Predicts if a collision would happen in the next few time steps
+        '''
+
+        steps_ahead = int(self.sight / (self.car.v + obs['v'] + 1e-5))
+
+
+        # Clone the car's current state
         test_car = Car(self.car.position.copy())
         test_car.v = self.car.v
         test_car.phi = self.car.phi
         test_car.beta = self.car.beta
 
-        # simulate move
-        test_car.move(df, a)
+        # Clone obstacle states
+        predicted_obstacles = []
+        for obs in self.obstacles:
+            distance = np.linalg.norm(obs['pos'] - self.car.position)
+            rel_speed = max(test_car.v + obs['v'], 1e-3)  # avoid division by zero
 
-        front = np.maximum(test_car.front, test_car.prev_front)
-        prev = np.minimum(test_car.front, test_car.prev_front)
+            # Estimate time until potential interaction
+            time_to_meet = distance / rel_speed
+            est_steps = int(np.ceil(time_to_meet / delta_time))
+            steps = min(est_steps, max_horizon)
 
-        denom = front - prev + self.noise
+            predicted_obstacles.append({
+                'pos': obs['pos'].copy(),
+                'r': obs['r'],
+                'v': obs['v']
+            })
 
-        # projects the jaywalker bounding box on the car's motion direction
-        upper = (self.jaywalker_max - prev) / denom
-        lower = (self.jaywalker_min - prev) / denom
+        # Use max steps among all obstacles to simulate forward
+        max_steps = max([obs['steps'] for obs in predicted_obstacles], default=5)
 
-        scalar_upper = np.min(upper)
-        scalar_lower = np.max(lower)
 
-        # check if jaywalker bounding box overlaps with the car's motion direction [0,1]
-        if scalar_upper >= 0 and scalar_lower <= 1 and scalar_lower <= scalar_upper:
-            return True
+        # Predict future positions for 'steps_ahead' steps
+        for _ in range(steps_ahead):
+            # Move test car
+            test_car.move(df, a)
+
+            # Predict obstacle's future position (assuming stationary)
+            if self.check_collision_with_obs(test_car, self.jaywalker, self.jaywalker_r):
+                return True
+
+            # Predict dynamic obstacles
+            for obs in predicted_obstacles:
+                if obs['steps'] <= 0:
+                    continue
+                obs['pos'][0] -= obs['v'] * delta_time
+                obs['steps'] -= 1
+
+                if self.check_collision_with_obs(test_car, obs['pos'], obs['r']):
+                    return True
 
         return False
  
@@ -277,6 +319,10 @@ class Jaywalker:
 
 
     def step(self, action):
+
+        # modifiche per aggiunta dinamica di ostacoli
+        for obs in self.obstacles:
+            obs['pos'][0] -= obs['v']  # si muovono verso sinistra
 
         df, a = self.actions[action]
 
@@ -339,6 +385,16 @@ class Jaywalker:
 
 
     def reset(self):
+
+        # MODIFICHE PER AGGIUNTA DINAMICA DI OSTACOLI
+        self.obstacles = []
+        for _ in range(random.randint(1, self.max_obstacles)):  
+            lane = self.lanes_y[1] #random.choice(self.lanes_y)
+            speed = random.uniform(0.1, 0.5)  # velocità relativa
+            pos_x = random.uniform(self.car.position[0]+10, self.dim_x)
+            self.obstacles.append({'type':'car', 'pos':array([pos_x, lane]), 'r':2.0, 'v':speed})
+
+
         self.car.reset(array([0.0,2.5]))
         self.counter_iterations = 0
 
@@ -358,6 +414,7 @@ class Jaywalker:
     def __str__(self):
         return "jaywalker"
     
+
     def render(self):
         plt.clf()
         ax = plt.gca()
@@ -1005,7 +1062,7 @@ def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_st
 if __name__ == "__main__":
     
     env = Jaywalker()
-    episodes = 3000
+    episodes = 1500
     replay_frequency = 3
     gamma = 0.95
     learning_rate = 1e-2 #5e-4
