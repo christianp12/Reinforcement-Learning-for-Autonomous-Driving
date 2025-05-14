@@ -131,9 +131,16 @@ class Jaywalker:
 
     def __init__(self):
 
-        # modifiche per implementare la frenata
-        self.brake_start = 15.0   # da questa distanza inizi a frenare
-        self.brake_max   = -5.0   # accelerazione di frenata massima
+        # MODIFICHE MOVIMENTO JAYWALKER
+        self.min_j_speed = 0.1
+        self.max_j_speed = 0.5
+        self.jaywalker_speed = 0.0 
+        self.jaywalker_dir = 1 
+        
+
+        # # modifiche per implementare la frenata
+        # self.brake_start = 15.0   # da questa distanza inizi a frenare
+        # self.brake_max   = -5.0   # accelerazione di frenata massima
 
         if not hasattr(self, 'car_img'):
             self.car_img = mpimg.imread("car/carontop.png")  # ← metti il file nella stessa cartella
@@ -227,6 +234,20 @@ class Jaywalker:
 
     def step(self, action):
 
+        # MODIFICHE PER MOVIMENTO JAYWALKER
+        self.jaywalker[1] += self.jaywalker_speed * self.jaywalker_dir
+        # -- se il pedone esce dalla corsia sbuca da sotto  
+        if self.jaywalker[1] < 0 or self.jaywalker[1] > self.dim_y:
+            # riparti daccapo: nuova X e inverti direzione
+            self.jaywalker[0] = random.uniform(self.dim_x/2, self.dim_x)
+            self.jaywalker_dir *= -1
+            # correggi Y all’interno
+            self.jaywalker[1] = np.clip(self.jaywalker[1], 0, self.dim_y)
+        # aggiorna bounding box del pedone
+        self.jaywalker_max = self.jaywalker + self.jaywalker_r
+        self.jaywalker_min = self.jaywalker - self.jaywalker_r
+
+
         #modifiche per aggiunta dinamica di ostacoli
         for obs in self.obstacles:
             obs['pos'][0] -= obs['v']  # si muovono verso sinistra
@@ -261,11 +282,6 @@ class Jaywalker:
             reward[2] = -1
             terminated = True
 
-        # # distance from center of own lane
-        # else:
-        #     reward[2] = max(0, 1 - np.abs(self.car.position[1] - lane_center) / lane_range)
-        #     reward[2] /= self.scale_factor
-
 
         inv_distance, angle = self.vision()
 
@@ -288,24 +304,24 @@ class Jaywalker:
 
         min_dist = 1 / inv_d_obs
 
-        if min_dist < self.brake_start and a > 0:
-            # fra +brake_start e 0 distanza, frena proporzionalmente
-            # coeff in [0,1]: 1 se sei a 0 di distanza, 0 se sei a brake_start
-            coeff = max(0.0, min_dist / self.brake_start)
-            # azione di frenata: più sei vicino, più ti avvicini a brake_max
-            a = self.brake_max * (1 - coeff)
-            # se vuoi un freno “a scalino”, puoi semplicemente:
-            #a = self.brake_max
+        # if min_dist < self.brake_start and a > 0:
+        #     # fra +brake_start e 0 distanza, frena proporzionalmente
+        #     # coeff in [0,1]: 1 se sei a 0 di distanza, 0 se sei a brake_start
+        #     coeff = max(0.0, min_dist / self.brake_start)
+        #     # azione di frenata: più sei vicino, più ti avvicini a brake_max
+        #     a = self.brake_max * (1 - coeff)
+        #     # se vuoi un freno “a scalino”, puoi semplicemente:
+        #     #a = self.brake_max
 
-            # ora muovi l’auto usando df, a
-            self.car.move(df, a)
+        #     # ora muovi l’auto usando df, a
+        #     self.car.move(df, a)
 
-        # reward per frenata in prossimità
-        if min_dist < self.brake_start:
-            if a < 0:
-                reward[0] += 1   # premio per frenare in prossimità
-            elif a > 0:
-                reward[0] -= 1   # penalità per accelerare verso ostacolo
+        # # reward per frenata in prossimità
+        # if min_dist < self.brake_start:
+        #     if a < 0:
+        #         reward[0] += 1   # premio per frenare in prossimità
+        #     elif a > 0:
+        #         reward[0] -= 1   # penalità per accelerare verso ostacolo
         
 
         current_lane = min(range(len(self.lanes_y)),
@@ -358,6 +374,25 @@ class Jaywalker:
         angle_obs = np.arctan((obs['pos'][1]-self.car.position[1])/(obs['pos'][0]-self.car.position[0]+self.noise))
         # corsia attuale (indice)
         lane_idx = min(range(len(self.lanes_y)), key=lambda i: abs(self.car.position[1]-self.lanes_y[i]))
+
+
+        #MODIFICHE PER MOVIMENTO JAYWALKER
+         # --- pedone: x casuale metà destra ---
+        self.jaywalker[0] = random.uniform(self.dim_x/2, self.dim_x)
+        # --- pedone: direzione Y casuale ---
+        self.jaywalker_dir = random.choice([1, -1])
+        # --- pedone: vel Y casuale ---
+        if self.jaywalker_dir == 1:
+            self.jaywalker[1] = 0
+        else:
+            self.jaywalker[1] = self.dim_y
+        # --- pedone: velocità casuale ---
+        self.jaywalker_speed = random.uniform(self.min_j_speed, self.max_j_speed)
+
+        # --- aggiorno la posizione del pedone ---
+        self.jaywalker_max = self.jaywalker + self.jaywalker_r
+        self.jaywalker_min = self.jaywalker - self.jaywalker_r
+
 
         return array([
             self.car.position[1],
