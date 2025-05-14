@@ -1,6 +1,10 @@
 import numpy as np
 from qqdm import qqdm
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.transforms as transforms
+import matplotlib.image as mpimg
+
 import os, time
 
 import torch.optim as optim
@@ -28,10 +32,10 @@ torch.set_num_threads(num_cores) # Intra-op parallelism
 
 
 ######## SET DEVICE ######################
-if torch.cuda.is_available():
-    device = "cuda:0"
-else:
-    device = "cpu"
+#if torch.cuda.is_available():
+#    device = torch.device("cuda:0")
+#else:
+device = "cpu"
 #########################################
 
 
@@ -75,7 +79,7 @@ class Car:
         self.lf = 1 # front axle
         self.lr = 1 # rear axle
 
-        self.max_speed = 20.0
+        self.max_speed = 5
 
         self.reset(position)
 
@@ -130,11 +134,23 @@ class Jaywalker:
 
     def __init__(self):
 
+        # set car image
+        if not hasattr(self, 'car_img'):
+            self.car_img = mpimg.imread("car/carontop.png")  # ← metti il file nella stessa cartella
+
+
         self.reward_size = 3
 
         # road length and width
         self.dim_x = 100
         self.dim_y = 10
+
+        # modifiche per aggiunta dinamica di ostacoli
+        self.n_lanes = 2
+        self.lane_width = self.dim_y / self.n_lanes
+        self.lanes_y = [self.lane_width/2 + i * self.lane_width for i in range(self.n_lanes)]
+        self.obstacles = []     # verrà popolato in reset()
+        self.max_obstacles = 1  # ad es., fino a 5 oggetti
 
         # target position for the car
         self.goal = array([self.dim_x, self.dim_y/4])
@@ -144,9 +160,17 @@ class Jaywalker:
         # jaywalker radius (collision boundary around the pedestrian)
         self.jaywalker_r = 2
 
-        # collision box
+        # other car
+        self.other_car = array([self.dim_x/2, self.goal[1] + 2])  # other lane
+        self.other_car_r = 1.0  # radius for collision detection
+
+        # jaywalker collision box
         self.jaywalker_max = self.jaywalker + self.jaywalker_r
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
+
+        # other car collision box
+        self.other_car_max = self.other_car + self.other_car_r
+        self.other_car_min = self.other_car - self.other_car_r
 
         # CAR CONTROL
         #self.df = [-np.pi/9, -np.pi/18, 0, np.pi/18, np.pi/9]
@@ -157,7 +181,8 @@ class Jaywalker:
         self.num_df_actions = len(self.df)
         self.num_a_actions = len(self.a)
 
-        self.state_size = 5 # [car position, distance from jaywalker, angle w.r.t. jaywalker, speed, steering angle]
+        #self.state_size = 5 # [car position, distance from jaywalker, angle w.r.t. jaywalker, speed, steering angle]
+        self.state_size = 1+3+2 # position + 3 vision rays + speed and steering angle
         self.action_size = self.num_df_actions * self.num_a_actions # number of actions
 
         self.max_iterations = 100 # episode terminates after this number of steps
@@ -195,25 +220,148 @@ class Jaywalker:
                 return True
         
         return False
+    
+    def check_collision_with_obs(self, car, obs_pos, obs_r):
+        '''
+        Check if the car collides with an obstacle
+        '''
+        front = np.maximum(self.car.front, self.car.prev_front)
+        prev = np.minimum(self.car.front, self.car.prev_front)
 
+        denom = front - prev + self.noise
+
+        # projects the car bounding box on the car's motion direction
+        upper = (self.other_car_max - prev) / denom
+        lower = (self.other_car_min - prev) / denom
+
+        scalar_upper = np.min(upper)
+        scalar_lower = np.max(lower)
+        
+        # check if other car bounding box overlaps with the car's motion direction [0,1]
+        if scalar_upper >= 0 and scalar_lower <= 1 and scalar_lower <= scalar_upper:
+                return True
+        
+        return False
+
+    # PREDICT IF A COLLISION WOULD HAPPEN IF THE CAR CHANGES LANE
+    def would_collide(self, df, a, max_horizon=10, delta_time=1.0):
+        '''
+        Predicts if a collision would happen in the next few time steps,
+        considering both the distance to other cars and the time needed
+        to return to the original lane after surpassing the jaywalker.
+        '''
+
+        # Clone ego car
+        test_car = Car(self.car.position.copy())
+        test_car.v = self.car.v
+        test_car.phi = self.car.phi
+        test_car.beta = self.car.beta
+
+        # Clone obstacles
+        predicted_obstacles = []
+        for obs in self.obstacles:
+            distance = np.linalg.norm(obs['pos'] - self.car.position)
+            rel_speed = max(test_car.v + obs['v'], 1e-3)  # avoid division by zero
+
+            # Estimate time until potential interaction
+            time_to_meet = distance / rel_speed
+            est_steps = int(np.ceil(time_to_meet / delta_time))
+            steps = min(est_steps, max_horizon)
+
+            predicted_obstacles.append({
+                'pos': obs['pos'].copy(),
+                'r': obs['r'],
+                'v': obs['v'],
+                'steps': steps
+            })
+
+        # Use max steps among all obstacles to simulate forward
+        max_steps = max([obs['steps'] for obs in predicted_obstacles], default=5)
+
+
+        # calculate steps needed to return to the original lane
+        original_lane_y = self.goal[1]
+        current_lane_deviation = abs(test_car.position[1] - original_lane_y)
+        # if we are already not in the lane
+        if current_lane_deviation > 0.1:
+            steps_to_return = int(current_lane_deviation / (abs(test_car.v) +1)) 
+        else:
+            # if we are in our lane, estimate steps for full change and return
+            lane_change_distance = self.lane_width/2
+            steps_to_return = int(2*lane_change_distance / (abs(test_car.v) +1))
+
+        # add buffer steps
+        total_prediction_steps = min(max_horizon, steps_to_return+5)
+
+        for step in range(total_prediction_steps):
+            test_car.move(df, a)
+
+            # Check jaywalker
+            if self.collision_with_jaywalker():
+                return True
+
+            # Check collision with other obstacles
+            for obs in predicted_obstacles:
+                # Predict obstacle's future position
+                obs_pos = obs['pos'].copy()
+                obs_pos[0] -= obs['v'] * (step + 1) * delta_time
+                
+                if self.check_collision_with_obs(test_car, obs_pos, obs['r']):
+                    return True
+                
+        
+        # if we passed the jaywalker, check if we can return to the original lane
+        if test_car.position[0] > self.jaywalker[0] + self.jaywalker_r:
+            # Calculate distance to nearest obstacle in original lane
+            for obs in self.obstacles:
+                if abs(obs['pos'][1] - original_lane_y) < self.lane_width/2:  # If obstacle is in our lane
+                    distance_to_obstacle = obs['pos'][0] - test_car.position[0]
+                    time_to_collision = distance_to_obstacle / (test_car.v + obs['v'] + 1e-5)
+                    
+                    # If we don't have enough time to return to lane before hitting obstacle
+                    if time_to_collision < steps_to_return * delta_time:
+                        return True
+
+        return False
+ 
 
     # return the inverse of the distance from the jaywalker and the angle w.r.t to it
     def vision(self):
 
-        vector_to_jaywalker = self.jaywalker - self.car.position + self.noise
-        distance = np.linalg.norm(vector_to_jaywalker)
+        # to look slighly left, center and right
+        angles = [-np.pi/6, 0, np.pi/6]
+        vision_data = []
 
-        if self.car.position[0] >= self.jaywalker[0] or distance > self.sight: ## Careful: it may still hit it
-            return 0, -np.pi
+        for angle in angles:
 
-        angle = np.arctan(vector_to_jaywalker[1]/vector_to_jaywalker[0])
+            vector_to_jaywalker = self.jaywalker - self.car.position + self.noise
+            distance = np.linalg.norm(vector_to_jaywalker)
+            angle_to_jaywalker = np.arctan2(vector_to_jaywalker[1], vector_to_jaywalker[0])
 
-        inv_distance = 1/distance
+            # Adjust angle based on the car's heading angle
+            relative_angle = angle_to_jaywalker - (self.car.phi + self.car.beta + angle)
+            # Normalize it to the range [-pi, pi]
+            relative_angle = (relative_angle + np.pi) % (2 * np.pi) - np.pi
 
-        return inv_distance, angle 
+            
+            # Check if within sight
+            if distance <= self.sight and np.abs(relative_angle) < np.pi/8:  # narrower field of view per ray
+                inv_distance = 1 / distance
+            else:
+                inv_distance = 0
+
+            vision_data.append((inv_distance))
+
+        # Replace inv_distance and angle with vision_data
+        #return inv_distance, angle 
+        return vision_data
 
 
     def step(self, action):
+
+        # modifiche per aggiunta dinamica di ostacoli
+        for obs in self.obstacles:
+            obs['pos'][0] -= obs['v']  # si muovono verso sinistra
 
         df, a = self.actions[action]
 
@@ -225,6 +373,11 @@ class Jaywalker:
 
         # collision with jaywalker
         if self.collision_with_jaywalker(): 
+            reward[0] = -10
+            terminated = True
+
+        # collision with other car
+        if self.would_collide(df, a):
             reward[0] = -10
             terminated = True
 
@@ -244,18 +397,25 @@ class Jaywalker:
         if self.car.front[1] > self.dim_y or self.car.front[1] < 0 or self.car.back[1] > self.dim_y or self.car.back[1] < 0 or self.car.position[0] < 0 or self.car.front[0] < 0:
             reward[2] = -1000
             terminated = True
-
-        # distance from center of own lane
+        # penalize being outside of the original lane
         else:
-            # computes a distance-based penalty to encourage the car to stay centered in its lane
-            reward[2] = -np.abs(self.car.position[1] - self.goal[1])
+            original_lane_y = self.goal[1]
+            lane_half_width = self.lane_width / 2
+            # Check if car is still within its own lane
+            if not (original_lane_y - lane_half_width <= self.car.position[1] <= original_lane_y + lane_half_width):
+                reward[2] = -1.0  # fixed penalty for being outside own lane
+            else:
+                reward[2] = 0.0
 
-        reward[2] /= self.scale_factor * 10
+        reward[2] /= self.scale_factor
 
 
-        inv_distance, angle = self.vision()
-
-        state = array([self.car.position[1], inv_distance, angle, self.car.v, self.car.beta]) # self.car.phi])
+        # substitute inv_distance and angle with vision_data
+        #inv_distance, angle = self.vision()
+        #state = array([self.car.position[1], inv_distance, angle, self.car.v, self.car.beta]) # self.car.phi])
+        vision_data = np.array(self.vision(), dtype=np.float32)
+        state = np.concatenate(([self.car.position[1]], vision_data, [self.car.v, self.car.beta]))
+        state = torch.tensor(state, dtype=torch.float32).to(device)
 
         self.counter_iterations += 1
         truncated = False
@@ -268,13 +428,27 @@ class Jaywalker:
 
 
     def reset(self):
+
+        # MODIFICHE PER AGGIUNTA DINAMICA DI OSTACOLI
+        self.obstacles = []
+        for _ in range(random.randint(1, self.max_obstacles)):  
+            lane = self.lanes_y[1] #random.choice(self.lanes_y)
+            speed = random.uniform(0.1, 0.5)  # velocità relativa
+            pos_x = random.uniform(self.car.position[0]+10, self.dim_x)
+            self.obstacles.append({'type':'car', 'pos':array([pos_x, lane]), 'r':2.0, 'v':speed})
+
+
         self.car.reset(array([0.0,2.5]))
         self.counter_iterations = 0
 
-        inv_distance, angle = self.vision()
+        # substitute inv_distance and angle with vision_data
+        #inv_distance, angle = self.vision()
+        #return array([self.car.position[1], inv_distance, angle, self.car.v, self.car.phi])
 
-        return array([self.car.position[1], inv_distance, angle, self.car.v, self.car.phi])
-    
+        vision_data = np.array(self.vision(), dtype=np.float32)
+        state = np.concatenate(([self.car.position[1]], vision_data, [self.car.v, self.car.beta]))
+        state = torch.tensor(state, dtype=torch.float32).to(device)
+        return state
 
     def random_action(self):
         return int(np.floor(random.random() * self.action_size))
@@ -282,12 +456,77 @@ class Jaywalker:
 
     def __str__(self):
         return "jaywalker"
+    
+
+    def render(self):
+        plt.clf()
+        ax = plt.gca()
+        road = mpatches.Rectangle((0, 0), self.dim_x, self.dim_y,
+                                  facecolor='black', edgecolor='none')
+        ax.add_patch(road)
+
+        gx = self.goal[0]
+        ax.plot([gx, gx], [0, self.dim_y],
+            color='lime', linewidth=2,
+            linestyle=(0, (5, 5)),
+            label='Finish')
+
+        # 2) linee di bordo continue – bianche
+        plt.plot([0, self.dim_x], [0, 0], color='white', linewidth=2)
+        plt.plot([0, self.dim_x], [self.dim_y, self.dim_y], color='white', linewidth=2)
+
+        # 3) linea centrale tratteggiata – bianca
+        mid_y = self.dim_y / 2
+        plt.plot([0, self.dim_x], [mid_y, mid_y],
+                 color='white', linewidth=1,
+                 linestyle=(0, (10, 10))) 
+
+        #PEDONE COME CERCHIO ROSSO
+        circle_j = plt.Circle(self.jaywalker, self.jaywalker_r, color='red', alpha=0.5)
+        plt.gca().add_patch(circle_j)
+
+        #GLI OSTACOLI POSSONO ESSERE MACCHINE (ARANCIONI)
+        for obs in getattr(self, 'obstacles', []):
+            c = 'orange' if obs['type']=='car' else 'green'
+            circle_o = plt.Circle(obs['pos'], obs['r'], color=c, alpha=0.5)
+            plt.gca().add_patch(circle_o)
+
+        car = self.car
+        car_length = 4.0
+        car_width = 4.0
+        arg = car.phi + car.beta
+
+        # Coordinate per posizionare l'immagine
+        extent = [
+            car.position[0] - car_length / 2,
+            car.position[0] + car_length / 2,
+            car.position[1] - car_width / 2,
+            car.position[1] + car_width / 2
+        ]
+
+        # Trasformazione per ruotare l'immagine
+        img_transform = transforms.Affine2D().rotate_around(
+            car.position[0], car.position[1], arg
+        ) + plt.gca().transData
+
+        # Mostra immagine dell’auto
+        plt.imshow(self.car_img, extent=extent, transform=img_transform, zorder=5)
+
+
+        blue_patch = mpatches.Patch(color='blue', label='Your Car')
+        red_patch = mpatches.Patch(color='red', label='Jaywalker')
+        orange_patch = mpatches.Patch(color='orange', label='Obstacle Car')
+        #plt.legend(handles=[blue_patch, red_patch, orange_patch])
+        
+        plt.xlim(-1, self.dim_x+1)
+        plt.ylim(-1, self.dim_y+1)
+        plt.pause(0.001)
 
 
 
 class Q_Network(nn.Module):
 
-    def __init__(self, n_observations, hidden = 128, weights = None):
+    def __init__(self, n_observations, hidden = 512, weights = None):
         
         super().__init__()
         self.layer1 = nn.Linear(n_observations, hidden)
@@ -329,7 +568,7 @@ class Q_Network(nn.Module):
 
 class Lex_Q_Network(Q_Network):
 
-    def __init__(self, n_observations, n_actions, hidden = 128, learning_rate = 1e-4, weights = None):
+    def __init__(self, n_observations, n_actions, hidden = 512, learning_rate = 1e-4, weights = None):
         
         super().__init__(n_observations, hidden, weights)
 
@@ -418,7 +657,7 @@ class Lex_Q_Network(Q_Network):
 
 class Weighted_Q_Network(Q_Network):
 
-    def __init__(self, n_observations, n_actions, hidden = 128, learning_rate = 1e-4, weights = None):
+    def __init__(self, n_observations, n_actions, hidden = 512, learning_rate = 1e-4, weights = None):
 
         super().__init__(n_observations, hidden, weights)
         
@@ -699,6 +938,10 @@ class QAgent():
                 action = self.act(state.unsqueeze(0))
                 next_state, reward, terminated, truncated, completed = self.env.step(action)
 
+                #MODIFICHE PER VEDERE GLI OSTACOLI
+                #if step % 10 == 0:  
+                self.env.render()
+
                 done = terminated or truncated
                 
                 next_state = torch.tensor(next_state).to(device)
@@ -883,6 +1126,11 @@ if __name__ == "__main__":
     simulations = 0
 
     network_type = sys.argv[1]
+
+    # print used device
+    print(f"Device: {device}")
+    #print(f"PyTorch is using: {torch.cuda.get_device_name(0)}")  # Should show your NVIDIA GPU
+    #print(f"CUDA available: {torch.cuda.is_available()}")  # Must be True
 
     #p = Pool(32)
     if network_type == "lex":
