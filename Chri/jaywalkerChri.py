@@ -835,15 +835,13 @@ class QAgent():
 
 
     def plot_score(self, score, start, end, N, title, filename):
-        plt.plot(score);
+        plt.clf()  # Clear previous render
+        plt.plot(score)
         mean_score = np.convolve(array(score), np.ones(N)/N, mode='valid')
-        plt.plot(np.arange(start,end), mean_score)
-
-        if title is not None:
-            plt.title(title);
-
+        plt.plot(np.arange(start, end), mean_score)
+        plt.title(title)
         plt.savefig(filename)
-        plt.clf()
+        plt.clf()  # Clear again (optional)
 
 
     def plot_learning(self, N, title, filename):
@@ -851,11 +849,11 @@ class QAgent():
         time = len(vs.oob)
         start = math.floor(N/2)
         end = time-start
-        self.plot_score(vs.collision, start, end, N, title + " collision", filename + str(self.env) + "_collision")
-        self.plot_score(vs.oob, start, end, N, title + " oob", filename + str(self.env) + "_oob")
-        self.plot_score(vs.distance, start, end, N, title + " distance", filename + str(self.env) + "_distance")
-        self.plot_score(self.completed, start, end, N, title + " completed", filename + str(self.env) + "_completed")
-        self.plot_score(self.num_actions, start, end, N, title + " actions", filename + str(self.env) + "_actions")
+        self.plot_score(vs.collision, start, end, N, title + " collision", filename + str(self.env) + "_collision_graph")
+        self.plot_score(vs.oob, start, end, N, title + " oob", filename + str(self.env) + "_oob_graph")
+        self.plot_score(vs.distance, start, end, N, title + " distance", filename + str(self.env) + "_distance_graph")
+        self.plot_score(self.completed, start, end, N, title + " completed", filename + str(self.env) + "_completed_graph")
+        self.plot_score(self.num_actions, start, end, N, title + " actions", filename + str(self.env) + "_actions_graph")
         
 
     def plot_epsilon(self, filename = ""):
@@ -937,25 +935,43 @@ class QAgent():
         
         plt.plot(jaywalker_position_x, jaywalker_position_y);
 
-        plt.savefig(path + str(self.env) + "_simulation_" + str(number));
+        plt.savefig(path + str(self.env) + "_simulation_" + str(number) + "_render.png");
         plt.clf();
 
 
-def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
-                replay_frequency, target_model_update_rate, memory_length, mini_batches, weights, img_filename, simulations_filename, num_simulations, version = ""):
-
-    agent = QAgent(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
-                replay_frequency, target_model_update_rate, memory_length, mini_batches, weights)
+def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, 
+              epsilon_decay, epsilon_min, episodes, gamma, train_start,
+              replay_frequency, target_model_update_rate, memory_length, 
+              mini_batches, weights, img_filename, simulations_filename, 
+              num_simulations, version=""):
     
+    # Create directories if they don't exist
+    os.makedirs(os.path.dirname(img_filename), exist_ok=True)
+    os.makedirs(os.path.dirname(simulations_filename), exist_ok=True)
+
+    agent = QAgent(network, env, learning_rate, batch_size, hidden, slack, 
+                  epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, 
+                  train_start, replay_frequency, target_model_update_rate, 
+                  memory_length, mini_batches, weights)
 
     agent.learn()
-    agent.plot_learning(31, title = "Jaywalker", filename = img_filename + str(agent.model) + "_" + version)
-    agent.plot_epsilon(img_filename + str(agent.model) + "_" + version)
     
-    for i in np.arange(num_simulations):
-        agent.simulate(i, simulations_filename + str(agent.model) + "_" + version)
+    # Save graphs with versioning
+    agent.plot_learning(31, title="Jaywalker", 
+                      filename=os.path.join(img_filename, f"{str(agent.model)}_{version}"))
     
-    agent.save_model(str(agent.model) + "_" + version)
+    # Save epsilon decay plot
+    agent.plot_epsilon(os.path.join(img_filename, f"{str(agent.model)}_{version}"))
+    
+    # Run and save simulations
+    for i in range(num_simulations):
+        agent.simulate(i, 
+                      path=os.path.join(simulations_filename, f"{str(agent.model)}_{version}"), 
+                      verbose=False)
+    
+    # Save model
+    model_path = f"{str(agent.model)}_{version}.pt" if version else f"{str(agent.model)}.pt"
+    agent.save_model(model_path)
 
 
 if __name__ == "__main__":
@@ -969,7 +985,7 @@ if __name__ == "__main__":
             print("Invalid jaywalker speed. Defaulting to 0.0.")
     
     env = Jaywalker(jaywalker_speed=jaywalker_speed)
-    episodes = 3000
+    episodes = 50
     replay_frequency = 3
     gamma = 0.95
     learning_rate = 1e-2 #5e-4
