@@ -143,15 +143,18 @@ class Jaywalker:
 
         # road length and width
         self.dim_x = 100
-        self.dim_y = 20
+        self.dim_y = 10
 
         # target position for the car
         self.goal = array([self.dim_x, self.dim_y/4])
 
 
+        self.jaywalker_initial_pos_easy = array([self.dim_x/2, self.dim_y/4])
+        self.jaywalker_initial_pos_hard = array([self.dim_x/5, self.dim_y/4])
+        self.start_easy = True
+
         # jaywalker initial position
-        self.jaywalker_initial_pos = array([self.dim_x/5, self.dim_y/4])
-        # jaywalker current position
+        self.jaywalker_initial_pos = self.jaywalker_initial_pos_easy
         self.jaywalker = np.copy(self.jaywalker_initial_pos)
         # jaywalker radius (collision boundary around the pedestrian)
         self.jaywalker_r = 2
@@ -189,6 +192,13 @@ class Jaywalker:
         self.sight = 40 # sight range: how far the car can see in front of it
 
         self.scale_factor = 100
+
+    def alternate_scenarios(self):
+        self.start_easy = not self.start_easy
+        if self.start_easy:
+            self.jaywalker_initial_pos = self.jaywalker_initial_pos_easy
+        else:
+            self.jaywalker_initial_pos = self.jaywalker_initial_pos_hard
 
     def move_jaywalker(self):
         '''
@@ -303,6 +313,7 @@ class Jaywalker:
         self.counter_iterations = 0
 
         # reset jaywalker position
+        self.alternate_scenarios()
         self.jaywalker = np.copy(self.jaywalker_initial_pos)
 
         inv_distance, angle = self.vision()
