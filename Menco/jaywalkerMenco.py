@@ -353,46 +353,51 @@ class Jaywalker:
 
 
     def reset(self):
-        #MODIFICHE PER AGGIUNTA DINAMICA DI OSTACOLI
-        self.obstacles = []
-        for _ in range(random.randint(1, self.max_obstacles)):  
-            lane = self.lanes_y[1] #random.choice(self.lanes_y)
-            speed = random.uniform(0.1, 0.5)  # velocità relativa
-            pos_x = random.uniform(self.car.position[0]+10, self.dim_x)
-            self.obstacles.append({'type':'car', 'pos':array([pos_x, lane]), 'r':2.0, 'v':speed})
 
-        self.car.reset(array([0.0,2.5]))
+        self.obstacles = []
+
+    # Alternanza scenari
+        self.last_scenario = getattr(self, 'last_scenario', 1)
+        current_scenario = 2 if self.last_scenario == 1 else 1
+        self.last_scenario = current_scenario
+
+        self.car.reset(array([0.0, 2.5]))
         self.counter_iterations = 0
 
-        inv_distance, angle = self.vision()
-
-        # trova ostacolo più vicino
-        dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
-        i_min = np.argmin(dists)
-        obs = self.obstacles[i_min]
-        inv_d_obs = 1/dists[i_min]
-        angle_obs = np.arctan((obs['pos'][1]-self.car.position[1])/(obs['pos'][0]-self.car.position[0]+self.noise))
-        # corsia attuale (indice)
-        lane_idx = min(range(len(self.lanes_y)), key=lambda i: abs(self.car.position[1]-self.lanes_y[i]))
-
-
-        #MODIFICHE PER MOVIMENTO JAYWALKER
-         # --- pedone: x casuale metà destra ---
-        self.jaywalker[0] = random.uniform(self.dim_x/2, self.dim_x)
-        # --- pedone: direzione Y casuale ---
-        self.jaywalker_dir = random.choice([1, -1])
-        # --- pedone: vel Y casuale ---
-        if self.jaywalker_dir == 1:
-            self.jaywalker[1] = 0
-        else:
-            self.jaywalker[1] = self.dim_y
-        # --- pedone: velocità casuale ---
-        self.jaywalker_speed = random.uniform(self.min_j_speed, self.max_j_speed)
-
-        # --- aggiorno la posizione del pedone ---
+    # --- Pedone fermo a metà strada, posizione fissa ---
+        self.jaywalker = array([self.dim_x * 0.5, self.dim_y / 4])
+        self.jaywalker_speed = 0.0
+        self.jaywalker_dir = 0
         self.jaywalker_max = self.jaywalker + self.jaywalker_r
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
+    # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
+        if current_scenario == 1:
+            pos_x = self.dim_x  # molto lontano dal pedone
+            speed = 0.1         # lento
+
+    # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
+        else:
+            pos_x = self.jaywalker[0] + 5  # vicino al pedone
+            speed = 0.5                    # veloce
+
+    # Auto ostacolante nella corsia di sorpasso
+        lane = self.lanes_y[1]
+        self.obstacles.append({
+            'type': 'car',
+            'pos': array([pos_x, lane]),
+            'r': 2.0,
+            'v': speed
+        })
+
+    # Stato iniziale
+        inv_distance, angle = self.vision()
+        dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
+        i_min = np.argmin(dists)
+        obs = self.obstacles[i_min]
+        inv_d_obs = 1 / dists[i_min]
+        angle_obs = np.arctan((obs['pos'][1] - self.car.position[1]) / (obs['pos'][0] - self.car.position[0] + self.noise))
+        lane_idx = min(range(len(self.lanes_y)), key=lambda i: abs(self.car.position[1] - self.lanes_y[i]))
 
         return array([
             self.car.position[1],
@@ -404,6 +409,7 @@ class Jaywalker:
             angle_obs,
             float(lane_idx)
         ])
+
     
 
     def random_action(self):
