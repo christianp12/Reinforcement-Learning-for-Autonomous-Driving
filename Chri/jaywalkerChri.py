@@ -787,8 +787,11 @@ class QAgent():
 
     def learn(self):
         bar = qqdm(np.arange(self.episodes), desc="Learning")
+
+        # counter for consecutive completed episodes
+        consecutive_successes = 0
+
         for e in bar:
-        
             state = self.env.reset()
             state = torch.tensor(state).to(device)
             episode_score = np.zeros(self.reward_size)
@@ -807,12 +810,10 @@ class QAgent():
                 done = terminated or truncated
                 
                 next_state = torch.tensor(next_state).to(device)
-
                 episode_score += reward
                 reward = torch.tensor(reward)
                 
                 self.add_experience(state, action, reward, next_state, terminated)
-                
                 state = next_state
                 
                 if (step & self.replay_frequency) == 0:
@@ -822,12 +823,24 @@ class QAgent():
                 
                 step += 1
 
+                # Update metrics
                 if done:                                
                     self.update_epsilon()
                     self.score.append(episode_score)
                     self.epsilon_record.append(self.epsilon)
                     self.completed.append(completed)
                     self.num_actions.append(step)
+
+                # Early stopping condition
+                if completed:
+                    consecutive_successes += 1
+                    if consecutive_successes >= 100:
+                        print(f"Early stopping achieved at episode {e+1} with {consecutive_successes} consecutive successes.")
+                        break
+                else:
+                    if consecutive_successes > 0:
+                        print(f"{consecutive_successes} consecutive successes reset at episode {e+1}.")
+                        consecutive_successes = 0
 
             if e >= 31:
                 rew_mean = sum(self.score[-31:])/31
