@@ -149,12 +149,9 @@ class Jaywalker:
         self.goal = array([self.dim_x, self.dim_y/4])
 
 
-        self.jaywalker_initial_pos_easy = array([self.dim_x/2, self.dim_y/4])
-        self.jaywalker_initial_pos_hard = array([self.dim_x/5, self.dim_y/4])
-        self.start_easy = True
-
         # jaywalker initial position
-        self.jaywalker_initial_pos = self.jaywalker_initial_pos_easy
+        self.jaywalker_initial_pos = array([self.dim_x/2, 0]) # initial position of the jaywalker
+        # jaywalker current position
         self.jaywalker = np.copy(self.jaywalker_initial_pos)
         # jaywalker radius (collision boundary around the pedestrian)
         self.jaywalker_r = 2
@@ -193,12 +190,6 @@ class Jaywalker:
 
         self.scale_factor = 100
 
-    def alternate_scenarios(self):
-        self.start_easy = not self.start_easy
-        if self.start_easy:
-            self.jaywalker_initial_pos = self.jaywalker_initial_pos_easy
-        else:
-            self.jaywalker_initial_pos = self.jaywalker_initial_pos_hard
 
     def move_jaywalker(self):
         '''
@@ -206,6 +197,7 @@ class Jaywalker:
         '''
         if self.jaywalker_speed > 0:
             self.jaywalker[1] += self.jaywalker_speed * self.jaywalker_direction
+
 
 
     # CHECK FOR COLLISION:
@@ -255,10 +247,6 @@ class Jaywalker:
 
         # move car
         self.car.move(df, a)
-
-        # Check if car has stopped
-        #if abs(self.car.v) < 0.1:
-         #   print("Car stopped")
 
         reward = np.zeros(self.reward_size)
         terminated = False
@@ -313,8 +301,11 @@ class Jaywalker:
         self.counter_iterations = 0
 
         # reset jaywalker position
-        self.alternate_scenarios()
-        self.jaywalker = np.copy(self.jaywalker_initial_pos)
+        self.jaywalker_direction = self.jaywalker_direction * -1
+        if self.jaywalker_direction < 0:
+            self.jaywalker = array([self.dim_x/2, self.dim_y])
+        else:
+            self.jaywalker = array([self.dim_x/2, 0])
 
         inv_distance, angle = self.vision()
 
@@ -796,8 +787,11 @@ class QAgent():
 
     def learn(self):
         bar = qqdm(np.arange(self.episodes), desc="Learning")
+
+        # counter for consecutive completed episodes
+        consecutive_successes = 0
+
         for e in bar:
-        
             state = self.env.reset()
             state = torch.tensor(state).to(device)
             episode_score = np.zeros(self.reward_size)
@@ -816,12 +810,10 @@ class QAgent():
                 done = terminated or truncated
                 
                 next_state = torch.tensor(next_state).to(device)
-
                 episode_score += reward
                 reward = torch.tensor(reward)
                 
                 self.add_experience(state, action, reward, next_state, terminated)
-                
                 state = next_state
                 
                 if (step & self.replay_frequency) == 0:
@@ -831,12 +823,24 @@ class QAgent():
                 
                 step += 1
 
+                # Update metrics
                 if done:                                
                     self.update_epsilon()
                     self.score.append(episode_score)
                     self.epsilon_record.append(self.epsilon)
                     self.completed.append(completed)
                     self.num_actions.append(step)
+
+                # Early stopping condition
+                if completed:
+                    consecutive_successes += 1
+                    if consecutive_successes >= 100:
+                        print(f"Early stopping achieved at episode {e+1} with {consecutive_successes} consecutive successes.")
+                        break
+                else:
+                    if consecutive_successes > 0:
+                        print(f"{consecutive_successes} consecutive successes reset at episode {e+1}.")
+                        consecutive_successes = 0
 
             if e >= 31:
                 rew_mean = sum(self.score[-31:])/31
@@ -954,6 +958,42 @@ class QAgent():
         plt.clf();
 
 
+    def test_model(self, model_path, num_episodes=10, render=True):
+        """
+        Test the trained model after training.
+        """
+        self.model.load_state_dict(torch.load(model_path, map_location=device))
+        self.model.eval()
+
+        success_rate = 0
+        collision_rate = 0
+
+        for episode in range(num_episodes):
+            state = self.env.reset()
+            state = torch.tensor(state).to(device)
+            done = False
+
+            while not done:
+                if render:
+                    self.env.render()
+
+                with torch.no_grad():
+                    Q = self.model(state.unsqueeze(0)).squeeze()
+                    action = self.greedy_arglexmax(Q)
+
+                next_state, _, terminated, truncated, completed = self.env.step(action)
+                done = terminated or truncated
+                state = torch.tensor(next_state).to(device)
+
+            # Update success and collision rates
+            success_rate += int(completed)
+            collision_rate += int(terminated and not completed)
+
+        print(f"Test Results ({num_episodes} episodes):")
+        print(f"- Success Rate: {success_rate / num_episodes * 100:.2f}%")
+        print(f"- Collision Rate: {collision_rate / num_episodes * 100:.2f}%")
+
+
 def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, 
               epsilon_decay, epsilon_min, episodes, gamma, train_start,
               replay_frequency, target_model_update_rate, memory_length, 
@@ -990,9 +1030,7 @@ def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_st
 
 
 if __name__ == "__main__":
-
-    # set jaywalker speed from command line (default to 0 if not set)
-    jaywalker_speed = 0.0
+    jaywalker_speed = 1.0
     if len(sys.argv) > 2:
         try:
             jaywalker_speed = float(sys.argv[2])
@@ -1000,61 +1038,15 @@ if __name__ == "__main__":
             print("Invalid jaywalker speed. Defaulting to 0.0.")
     
     env = Jaywalker(jaywalker_speed=jaywalker_speed)
-    episodes = 3000
-    replay_frequency = 3
-    gamma = 0.95
-    learning_rate = 1e-2 #5e-4
-    epsilon_start = 1
-    epsilon_decay = 0.997 #0.995
-    epsilon_min = 0.01
-    batch_size = 256
-    train_start = 1000
-    target_model_update_rate = 1e-3
-    memory_length = 10000 #100000
-    mini_batches = 4
-    branch_size = 256
-    slack = 0.1
-    hidden = 128
-    num_simulations = 1
-    img_filename = "imgs/"
-    simulations_filename = "imgs/simulations/"
-    simulations = 0
-
-    network_type = sys.argv[1]
-
-    # print used device
-    print(f"Device: {device}")
-    #print(f"PyTorch is using: {torch.cuda.get_device_name(0)}")  # Should show your NVIDIA GPU
-    #print(f"CUDA available: {torch.cuda.is_available()}")  # Must be True
-
-    #p = Pool(32)
-    if network_type == "lex":
-        network = Lex_Q_Network
-        weights = None
-
-    elif network_type == "weighted":
-        network = Weighted_Q_Network
-        weights = torch.tensor([1.0, 0.1, 0.01])
-
-        simulations = int(sys.argv[2])
-
-        if simulations > 1:
-            weights_list = [weights ** i for i in np.arange(1, simulations+1)]
-            img_filename = "weighted_simulations/" + img_filename
-            simulations_filename = "weighted_simulations/simulations/"
-
-    elif network_type == "sclar":
-        network = Scalar_Q_Network
-
-    else:
-        raise ValueError("Network type" + network_type + "unknown")
-
-    if simulations > 1:
-        for i in np.arange(simulations):
-            w = weights_list[i]
-
-            main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
-                replay_frequency, target_model_update_rate, memory_length, mini_batches, w, img_filename, simulations_filename, num_simulations, "v" + str(i) + "_")
-    else:
-        main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
-                replay_frequency, target_model_update_rate, memory_length, mini_batches, weights, img_filename, simulations_filename, num_simulations)
+    agent = QAgent(Lex_Q_Network, env, learning_rate=1e-4, batch_size=32, hidden=128, slack=0.1,
+                  epsilon_start=1.0, epsilon_decay=0.995, epsilon_min=0.01, episodes=1000,
+                  gamma=0.99, train_start=1000, replay_frequency=4, 
+                  target_model_update_rate=0.005, memory_length=10000, mini_batches=1,
+                  weights=torch.tensor([1.0, 0.1, 0.01]))
+    
+    # To test a saved model
+    agent.test_model(
+        model_path="Lex.ptjaywalker_QAgent.pt",
+        num_episodes=10,
+        render=True
+    )
