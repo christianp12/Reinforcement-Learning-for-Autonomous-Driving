@@ -149,12 +149,8 @@ class Jaywalker:
         self.goal = array([self.dim_x, self.dim_y/4])
 
 
-        self.jaywalker_initial_pos_easy = array([self.dim_x/2, self.dim_y/4])
-        self.jaywalker_initial_pos_hard = array([self.dim_x/5, self.dim_y/4])
-        self.start_easy = True
-
         # jaywalker initial position
-        self.jaywalker_initial_pos = self.jaywalker_initial_pos_easy
+        self.jaywalker_initial_pos = array([self.dim_x/2, 0]) # initial position of the jaywalker
         # jaywalker current position
         self.jaywalker = np.copy(self.jaywalker_initial_pos)
         # jaywalker radius (collision boundary around the pedestrian)
@@ -195,20 +191,13 @@ class Jaywalker:
         self.scale_factor = 100
 
 
-    def alternate_scenarios(self):
-        self.start_easy = not self.start_easy
-        if self.start_easy:
-            self.jaywalker_initial_pos = self.jaywalker_initial_pos_easy
-        else:
-            self.jaywalker_initial_pos = self.jaywalker_initial_pos_hard
-
-
     def move_jaywalker(self):
         '''
         Update jaywalker position based on its speed and direction
         '''
         if self.jaywalker_speed > 0:
             self.jaywalker[1] += self.jaywalker_speed * self.jaywalker_direction
+
 
 
     # CHECK FOR COLLISION:
@@ -312,8 +301,11 @@ class Jaywalker:
         self.counter_iterations = 0
 
         # reset jaywalker position
-        self.alternate_scenarios()
-        self.jaywalker = np.copy(self.jaywalker_initial_pos)
+        self.jaywalker_direction = self.jaywalker_direction * -1
+        if self.jaywalker_direction < 0:
+            self.jaywalker = array([self.dim_x/2, self.dim_y])
+        else:
+            self.jaywalker = array([self.dim_x/2, 0])
 
         inv_distance, angle = self.vision()
 
