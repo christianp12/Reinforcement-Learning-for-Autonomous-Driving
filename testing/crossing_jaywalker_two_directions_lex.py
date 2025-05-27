@@ -301,7 +301,7 @@ class Jaywalker:
         self.counter_iterations = 0
 
         # reset jaywalker position
-        #self.jaywalker_direction = self.jaywalker_direction * -1
+        self.jaywalker_direction = self.jaywalker_direction * -1
         if self.jaywalker_direction < 0:
             self.jaywalker = array([self.dim_x/2, self.dim_y])
         else:
@@ -958,6 +958,42 @@ class QAgent():
         plt.clf();
 
 
+    def test_model(self, model_path, num_episodes=10, render=True):
+        """
+        Test the trained model after training.
+        """
+        self.model.load_state_dict(torch.load(model_path, map_location=device))
+        self.model.eval()
+
+        success_rate = 0
+        collision_rate = 0
+
+        for episode in range(num_episodes):
+            state = self.env.reset()
+            state = torch.tensor(state).to(device)
+            done = False
+
+            while not done:
+                if render:
+                    self.env.render()
+
+                with torch.no_grad():
+                    Q = self.model(state.unsqueeze(0)).squeeze()
+                    action = self.greedy_arglexmax(Q)
+
+                next_state, _, terminated, truncated, completed = self.env.step(action)
+                done = terminated or truncated
+                state = torch.tensor(next_state).to(device)
+
+            # Update success and collision rates
+            success_rate += int(completed)
+            collision_rate += int(terminated and not completed)
+
+        print(f"Test Results ({num_episodes} episodes):")
+        print(f"- Success Rate: {success_rate / num_episodes * 100:.2f}%")
+        print(f"- Collision Rate: {collision_rate / num_episodes * 100:.2f}%")
+
+
 def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, 
               epsilon_decay, epsilon_min, episodes, gamma, train_start,
               replay_frequency, target_model_update_rate, memory_length, 
@@ -994,9 +1030,7 @@ def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_st
 
 
 if __name__ == "__main__":
-
-    # set jaywalker speed from command line (default to 0 if not set)
-    jaywalker_speed = 0.0
+    jaywalker_speed = 1.0
     if len(sys.argv) > 2:
         try:
             jaywalker_speed = float(sys.argv[2])
@@ -1004,61 +1038,15 @@ if __name__ == "__main__":
             print("Invalid jaywalker speed. Defaulting to 0.0.")
     
     env = Jaywalker(jaywalker_speed=jaywalker_speed)
-    episodes = 3000
-    replay_frequency = 3
-    gamma = 0.95
-    learning_rate = 1e-2 #5e-4
-    epsilon_start = 1
-    epsilon_decay = 0.997 #0.995
-    epsilon_min = 0.01
-    batch_size = 256
-    train_start = 1000
-    target_model_update_rate = 1e-3
-    memory_length = 10000 #100000
-    mini_batches = 4
-    branch_size = 256
-    slack = 0.1
-    hidden = 128
-    num_simulations = 1
-    img_filename = "imgs/"
-    simulations_filename = "imgs/simulations/"
-    simulations = 0
-
-    network_type = sys.argv[1]
-
-    # print used device
-    print(f"Device: {device}")
-    #print(f"PyTorch is using: {torch.cuda.get_device_name(0)}")  # Should show your NVIDIA GPU
-    #print(f"CUDA available: {torch.cuda.is_available()}")  # Must be True
-
-    #p = Pool(32)
-    if network_type == "lex":
-        network = Lex_Q_Network
-        weights = None
-
-    elif network_type == "weighted":
-        network = Weighted_Q_Network
-        weights = torch.tensor([1.0, 0.1, 0.01])
-
-        simulations = int(sys.argv[2])
-
-        if simulations > 1:
-            weights_list = [weights ** i for i in np.arange(1, simulations+1)]
-            img_filename = "weighted_simulations/" + img_filename
-            simulations_filename = "weighted_simulations/simulations/"
-
-    elif network_type == "sclar":
-        network = Scalar_Q_Network
-
-    else:
-        raise ValueError("Network type" + network_type + "unknown")
-
-    if simulations > 1:
-        for i in np.arange(simulations):
-            w = weights_list[i]
-
-            main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
-                replay_frequency, target_model_update_rate, memory_length, mini_batches, w, img_filename, simulations_filename, num_simulations, "v" + str(i) + "_")
-    else:
-        main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
-                replay_frequency, target_model_update_rate, memory_length, mini_batches, weights, img_filename, simulations_filename, num_simulations)
+    agent = QAgent(Lex_Q_Network, env, learning_rate=1e-4, batch_size=32, hidden=128, slack=0.1,
+                  epsilon_start=1.0, epsilon_decay=0.995, epsilon_min=0.01, episodes=1000,
+                  gamma=0.99, train_start=1000, replay_frequency=4, 
+                  target_model_update_rate=0.005, memory_length=10000, mini_batches=1,
+                  weights=torch.tensor([1.0, 0.1, 0.01]))
+    
+    # To test a saved model
+    agent.test_model(
+        model_path="Lex.ptjaywalker_QAgent.pt",
+        num_episodes=10,
+        render=True
+    )
