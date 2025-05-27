@@ -274,11 +274,6 @@ class Jaywalker:
             reward[2] = -1000
             terminated = True
 
-        # distance from center of own lane
-        else:
-            # computes a distance-based penalty to encourage the car to stay centered in its lane
-            reward[2] = -np.abs(self.car.position[1] - self.goal[1])
-
         reward[2] /= self.scale_factor * 10
 
 

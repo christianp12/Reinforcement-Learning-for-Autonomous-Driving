@@ -181,6 +181,7 @@ class Jaywalker:
         self.car = Car(array([0.0,2.5])) # car starting position (x,y)
 
         self.counter_iterations = 0
+        self.counter_scenarios = 1
 
         #self.prev_center_disance = np.abs(self.car.position[1] - self.goal[1])
         self.prev_target_distance = np.linalg.norm(self.car.front - self.goal) # euclidean distance from target
@@ -294,6 +295,26 @@ class Jaywalker:
 
 
         return state, reward, terminated, truncated, completed
+    
+
+    def alternate_scenarios(self):
+
+        self.counter_scenarios += 1
+        if self.counter_scenarios > 4:
+            self.counter_scenarios = 1
+
+        if self.counter_scenarios == 1:
+            self.jaywalker_direction = 1
+            self.jaywalker = array([self.dim_x/2, 0])
+        elif self.counter_scenarios == 2:
+            self.jaywalker_direction = -1
+            self.jaywalker = array([self.dim_x/2, self.dim_y])
+        elif self.counter_scenarios == 3:
+            self.jaywalker_direction = 1
+            self.jaywalker = array([self.dim_x/5, 0])
+        elif self.counter_scenarios == 4:
+            self.jaywalker_direction = -1
+            self.jaywalker = array([self.dim_x/5, self.dim_y])
 
 
     def reset(self):
@@ -301,11 +322,7 @@ class Jaywalker:
         self.counter_iterations = 0
 
         # reset jaywalker position
-        self.jaywalker_direction = self.jaywalker_direction * -1
-        if self.jaywalker_direction < 0:
-            self.jaywalker = array([self.dim_x/2, self.dim_y])
-        else:
-            self.jaywalker = array([self.dim_x/2, 0])
+        self.alternate_scenarios()
 
         inv_distance, angle = self.vision()
 
@@ -1077,8 +1094,8 @@ if __name__ == "__main__":
     # To test a saved model
     agent.test_model(
         model_path="Lex.ptjaywalker_QAgent.pt",
-        num_episodes=2,
+        num_episodes=4,
         render=True
     )
 
-    agent.plot_speed_per_episode(filename="crossing_jaywalker_lex_speed.png")
+    agent.plot_speed_per_episode(filename="crossing_jaywalker_easy_hard_lex.png")
