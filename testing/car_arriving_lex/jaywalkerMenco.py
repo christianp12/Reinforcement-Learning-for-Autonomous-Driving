@@ -136,7 +136,7 @@ class Jaywalker:
         self.max_j_speed = 0.5
         self.jaywalker_speed = 0.0 
         self.jaywalker_dir = 1 
-        
+
 
         # # modifiche per implementare la frenata
         # self.brake_start = 15.0   # da questa distanza inizi a frenare
@@ -151,6 +151,9 @@ class Jaywalker:
 
         self.dim_x = 100
         self.dim_y = 10
+
+        # MODIFICHE PER VISIONE        
+        self.max_vision_range = self.dim_x * (1/5)  
 
                 #modifiche per aggiunta dinamica di ostacoli
         self.n_lanes = 2
@@ -188,7 +191,7 @@ class Jaywalker:
         self.prev_target_distance = np.linalg.norm(self.car.front - self.goal)
 
         self.noise = 1e-5
-        self.sight = 40
+        self.sight = 20 #modificato per vedere il jaywalker
 
         self.scale_factor = 100
         #per incentivare a restare in corsia
@@ -216,21 +219,43 @@ class Jaywalker:
         return False
 
 
-    # return the inverse of the distance from the jaywalker and the angle w.r.t to it
     def vision(self):
+        dist = np.linalg.norm(self.jaywalker - self.car.position)
+        if dist > self.max_vision_range:
+        # oltre il range: non “vede” il pedone
+            return 0.0, 0.0
+        inv_distance = 1.0 / dist
+        angle = np.arctan2(self.jaywalker[1]-self.car.position[1],
+                       self.jaywalker[0]-self.car.position[0])
+        return inv_distance, angle
 
-        vector_to_jaywalker = self.jaywalker - self.car.position + self.noise
-        distance = np.linalg.norm(vector_to_jaywalker)
+    def collision_with_obstacle(self):
+        car_r = 2.0  # same as jaywalker radius
+        car_front_max = self.car.front + car_r
+        car_front_min = self.car.front - car_r
 
-        if self.car.position[0] >= self.jaywalker[0] or distance > self.sight: ## Careful: it may still hit it
-            return 0, -np.pi
+        car_prev_front_max = self.car.prev_front + car_r
+        car_prev_front_min = self.car.prev_front - car_r
 
-        angle = np.arctan(vector_to_jaywalker[1]/vector_to_jaywalker[0])
+        for obs in self.obstacles:
+            obs_max = obs['pos'] + obs['r']
+            obs_min = obs['pos'] - obs['r']
 
-        inv_distance = 1/distance
+            front = np.maximum(car_front_max, car_prev_front_max)
+            prev = np.minimum(car_front_min, car_prev_front_min)
 
-        return inv_distance, angle 
+            denom = front - prev + self.noise
 
+            upper = (obs_max - prev) / denom
+            lower = (obs_min - prev) / denom
+
+            scalar_upper = np.min(upper)
+            scalar_lower = np.max(lower)
+
+            if scalar_upper >= 0 and scalar_lower <= 1 and scalar_lower <= scalar_upper:
+                return True
+
+        return False
 
     def step(self, action):
 
@@ -259,19 +284,15 @@ class Jaywalker:
         terminated = False
         completed = False
 
-        if self.collision_with_jaywalker(): # collision with jaywalker
-            reward[0] = -1 #modifico la penalità per rendere la macchina meno prudente
+        if self.collision_with_jaywalker():
+            reward[0] = -10
             terminated = True
-
-
-        # distance from target
-        reward[1] = (self.car.position[0] - self.car.prev_position[0])/self.scale_factor
 
         # accept surpassing the goal, terminate
         if self.car.front[0] >= self.goal[0]:
             if not terminated:
                 completed = True
-                reward[1] += 100.0
+                reward[1] += 100
             terminated = True
 
 
@@ -281,15 +302,25 @@ class Jaywalker:
             terminated = True
 
 
+        # distance from target
+        reward[1] = (self.car.position[0] - self.car.prev_position[0])/self.scale_factor
+        reward[2] /= self.scale_factor * 10
+
         inv_distance, angle = self.vision()
 
         
-        # trova ostacolo più vicino
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
-        obs = self.obstacles[i_min]
-        inv_d_obs = 1/dists[i_min]
-        angle_obs = np.arctan((obs['pos'][1]-self.car.position[1])/(obs['pos'][0]-self.car.position[0]+self.noise))
+        dist_obs = dists[i_min]
+
+        if dist_obs > self.max_vision_range:
+            inv_d_obs, angle_obs = 0.0, 0.0
+        else:
+            inv_d_obs = 1.0 / dist_obs
+            obs = self.obstacles[i_min]
+            angle_obs = np.arctan2(obs['pos'][1]-self.car.position[1],
+                           obs['pos'][0]-self.car.position[0] + self.noise)
+
         # corsia attuale (indice)
         lane_idx = min(range(len(self.lanes_y)), key=lambda i: abs(self.car.position[1]-self.lanes_y[i]))
         # nuovo state
@@ -299,41 +330,6 @@ class Jaywalker:
             inv_d_obs, angle_obs,
             float(lane_idx)
         ])
-
-        min_dist = 1 / inv_d_obs
-
-        # if min_dist < self.brake_start and a > 0:
-        #     # fra +brake_start e 0 distanza, frena proporzionalmente
-        #     # coeff in [0,1]: 1 se sei a 0 di distanza, 0 se sei a brake_start
-        #     coeff = max(0.0, min_dist / self.brake_start)
-        #     # azione di frenata: più sei vicino, più ti avvicini a brake_max
-        #     a = self.brake_max * (1 - coeff)
-        #     # se vuoi un freno “a scalino”, puoi semplicemente:
-        #     #a = self.brake_max
-
-        #     # ora muovi l’auto usando df, a
-        #     self.car.move(df, a)
-
-        # # reward per frenata in prossimità
-        # if min_dist < self.brake_start:
-        #     if a < 0:
-        #         reward[0] += 1   # premio per frenare in prossimità
-        #     elif a > 0:
-        #         reward[0] -= 1   # penalità per accelerare verso ostacolo
-        
-
-        current_lane = min(range(len(self.lanes_y)),
-            key=lambda i: abs(self.car.position[1] - self.lanes_y[i]))
-        preferred_lane = self.lanes_y.index(self.goal[1])
-
-        if current_lane == preferred_lane:
-            self.time_in_lane += 1
-            reward[2] = self.time_in_lane * 0.001
-        else:
-            self.time_in_lane = 0
-            reward[2] = -0.5
-
-
 
         self.counter_iterations += 1
         truncated = False
@@ -345,6 +341,10 @@ class Jaywalker:
             if np.linalg.norm(self.car.front - obs['pos']) < obs['r']:
                 reward[0] = -1
                 terminated = True
+        
+        if self.collision_with_obstacle():
+            reward[0] -= 10
+            terminated = True
 
 
         return state, reward, terminated, truncated, completed
@@ -372,12 +372,12 @@ class Jaywalker:
     # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
         if current_scenario == 1:
             pos_x = self.dim_x  # molto lontano dal pedone
-            speed = 0.1         # lento
+            speed = 1         # lento
 
     # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
         else:
             pos_x = self.jaywalker[0] + 5  # vicino al pedone
-            speed = 0.5                    # veloce
+            speed = 3                    # veloce
 
     # Auto ostacolante nella corsia di sorpasso
         lane = self.lanes_y[1]
@@ -393,9 +393,16 @@ class Jaywalker:
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
         obs = self.obstacles[i_min]
-        inv_d_obs = 1 / dists[i_min]
-        angle_obs = np.arctan((obs['pos'][1] - self.car.position[1]) / (obs['pos'][0] - self.car.position[0] + self.noise))
-        lane_idx = min(range(len(self.lanes_y)), key=lambda i: abs(self.car.position[1] - self.lanes_y[i]))
+        dist_obs = dists[i_min]
+
+    # modifiche per vedere gli ostacoli entro un range
+        if dist_obs > self.max_vision_range:
+            inv_d_obs, angle_obs = 0.0, 0.0
+        else:
+            inv_d_obs = 1.0 / dist_obs
+            obs = self.obstacles[i_min]
+            angle_obs = np.arctan2(obs['pos'][1]-self.car.position[1],
+                           obs['pos'][0]-self.car.position[0] + self.noise)
 
         return array([
             self.car.position[1],
@@ -405,7 +412,7 @@ class Jaywalker:
             self.car.beta,
             inv_d_obs,
             angle_obs,
-            float(lane_idx)
+            float(0) # corsia attuale (indice, 0 per la corsia di sinistra)
         ])
 
     

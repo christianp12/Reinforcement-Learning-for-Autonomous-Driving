@@ -354,6 +354,12 @@ class Jaywalker:
 
     def reset(self):
 
+         # ==== GRAFICA VELOCITÀ-TEMPO ====
+        # azzero la storia della velocità e del tempo
+        self.velocity_history = []
+        self.time_steps = []
+        # ===============================
+
         self.obstacles = []
 
         #azzero la velocità passata della macchina ad ogni step
@@ -424,9 +430,14 @@ class Jaywalker:
         return "jaywalker"
     
     def render(self):
+
+        # ===== GRAFICO VELOCITÀ-TEMPO =====
+
         if not hasattr(self, "velocity_history"):
             self.velocity_history = []
             self.time_steps = []
+
+        # =======================================
 
     # creo la velocità della macchina passata
         self.velocity_history.append(self.car.v)
@@ -493,6 +504,7 @@ class Jaywalker:
         ax2.set_title("Velocity over Time")
         ax2.set_xlabel("Time Step")
         ax2.set_ylabel("Velocity")
+    # ====================================
 
         plt.tight_layout()
         plt.pause(0.001)

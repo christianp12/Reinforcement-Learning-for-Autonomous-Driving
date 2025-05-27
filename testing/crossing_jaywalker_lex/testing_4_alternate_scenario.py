@@ -318,6 +318,13 @@ class Jaywalker:
 
 
     def reset(self):
+
+        # ==== GRAFICA VELOCITÀ-TEMPO ====
+        # azzero la storia della velocità e del tempo
+        self.velocity_history = []
+        self.time_steps = []
+        # ===============================
+
         self.car.reset(array([0.0,2.5]))
         self.counter_iterations = 0
 
@@ -338,44 +345,56 @@ class Jaywalker:
     
 
     def render(self):
+
+        # ===== GRAFICO VELOCITÀ-TEMPO =====
+
+        if not hasattr(self, "velocity_history"):
+            self.velocity_history = []
+            self.time_steps = []
+
+        # =======================================
+
+    # creo la velocità della macchina passata
+        self.velocity_history.append(self.car.v)
+        self.time_steps.append(len(self.time_steps))
+
         plt.clf()
-        ax = plt.gca()
+        fig = plt.gcf()
+        fig.set_size_inches(10, 6)  # Allarga la finestra
+        ax1 = plt.subplot2grid((2, 1), (0, 0))  # Strada
+        ax2 = plt.subplot2grid((2, 1), (1, 0))  # Grafico velocità-tempo
+
+    # === GRAFICA STRADA (ax1) ===
         road = mpatches.Rectangle((0, 0), self.dim_x, self.dim_y,
-                                  facecolor='black', edgecolor='none')
-        ax.add_patch(road)
+                              facecolor='black', edgecolor='none')
+        ax1.add_patch(road)
 
         gx = self.goal[0]
-        ax.plot([gx, gx], [0, self.dim_y],
-            color='lime', linewidth=2,
-            linestyle=(0, (5, 5)),
-            label='Finish')
+        ax1.plot([gx, gx], [0, self.dim_y],
+             color='lime', linewidth=2,
+             linestyle=(0, (5, 5)),
+             label='Finish')
 
-        # 2) linee di bordo continue – bianche
-        plt.plot([0, self.dim_x], [0, 0], color='white', linewidth=2)
-        plt.plot([0, self.dim_x], [self.dim_y, self.dim_y], color='white', linewidth=2)
-
-        # 3) linea centrale tratteggiata – bianca
+        ax1.plot([0, self.dim_x], [0, 0], color='white', linewidth=2)
+        ax1.plot([0, self.dim_x], [self.dim_y, self.dim_y], color='white', linewidth=2)
         mid_y = self.dim_y / 2
-        plt.plot([0, self.dim_x], [mid_y, mid_y],
-                 color='white', linewidth=1,
-                 linestyle=(0, (10, 10))) 
+        ax1.plot([0, self.dim_x], [mid_y, mid_y],
+             color='white', linewidth=1,
+             linestyle=(0, (10, 10)))
 
-        #PEDONE COME CERCHIO ROSSO
         circle_j = plt.Circle(self.jaywalker, self.jaywalker_r, color='red', alpha=0.5)
-        plt.gca().add_patch(circle_j)
+        ax1.add_patch(circle_j)
 
-        #GLI OSTACOLI POSSONO ESSERE MACCHINE (ARANCIONI)
         for obs in getattr(self, 'obstacles', []):
-            c = 'orange' if obs['type']=='car' else 'green'
+            c = 'orange' if obs['type'] == 'car' else 'green'
             circle_o = plt.Circle(obs['pos'], obs['r'], color=c, alpha=0.5)
-            plt.gca().add_patch(circle_o)
+            ax1.add_patch(circle_o)
 
         car = self.car
         car_length = 4.0
         car_width = 4.0
         arg = car.phi + car.beta
 
-        # Coordinate per posizionare l'immagine
         extent = [
             car.position[0] - car_length / 2,
             car.position[0] + car_length / 2,
@@ -383,22 +402,26 @@ class Jaywalker:
             car.position[1] + car_width / 2
         ]
 
-        # Trasformazione per ruotare l'immagine
         img_transform = transforms.Affine2D().rotate_around(
             car.position[0], car.position[1], arg
-        ) + plt.gca().transData
+        ) + ax1.transData
 
-        # Mostra immagine dell’auto
-        plt.imshow(self.car_img, extent=extent, transform=img_transform, zorder=5)
+        ax1.imshow(self.car_img, extent=extent, transform=img_transform, zorder=5)
 
+        ax1.set_xlim(-1, self.dim_x + 1)
+        ax1.set_ylim(-1, self.dim_y + 1)
+        ax1.set_title("Autonomous Car Environment")
 
-        blue_patch = mpatches.Patch(color='blue', label='Your Car')
-        red_patch = mpatches.Patch(color='red', label='Jaywalker')
-        orange_patch = mpatches.Patch(color='orange', label='Obstacle Car')
-        #plt.legend(handles=[blue_patch, red_patch, orange_patch])
-        
-        plt.xlim(-1, self.dim_x+1)
-        plt.ylim(-1, self.dim_y+1)
+    # === GRAFICO VELOCITÀ-TEMPO (ax2) ===
+        ax2.plot(self.time_steps, self.velocity_history, color='cyan', linewidth=2)
+        ax2.set_xlim(left=max(0, len(self.time_steps)-100), right=len(self.time_steps))
+        ax2.set_ylim(0, max(1, max(self.velocity_history) * 1.1))
+        ax2.set_title("Velocity over Time")
+        ax2.set_xlabel("Time Step")
+        ax2.set_ylabel("Velocity")
+    # ====================================
+
+        plt.tight_layout()
         plt.pause(0.001)
 
 

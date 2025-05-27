@@ -87,7 +87,7 @@ class Car:
         #velocità
         self.v += a
         
-        #self.v = np.maximum(-self.max_speed, np.minimum(self.max_speed, self.v)) # speed saturation
+        self.v = np.maximum(-self.max_speed, np.minimum(self.max_speed, self.v)) # speed saturation
         
         #phi e besta sono angoli di sterzata e angolo di sterzata effettivo
         #self.beta = np.arctan((1 + self.lr / self.lf) * np.tan(df))
@@ -271,15 +271,13 @@ class Jaywalker:
         if self.car.front[0] >= self.goal[0]:
             if not terminated:
                 completed = True
+                reward[1] += 100.0
             terminated = True
-
-        lane_center = self.goal[1]
-        lane_range = self.lane_width / 2
 
 
         # collision with borders
         if self.car.front[1] > self.dim_y or self.car.front[1] < 0 or self.car.back[1] > self.dim_y or self.car.back[1] < 0 or self.car.position[0] < 0 or self.car.front[0] < 0:
-            reward[2] = -1
+            reward[2] -= 1000
             terminated = True
 
 
@@ -330,7 +328,7 @@ class Jaywalker:
 
         if current_lane == preferred_lane:
             self.time_in_lane += 1
-            reward[2] = self.time_in_lane * 0.01
+            reward[2] = self.time_in_lane * 0.001
         else:
             self.time_in_lane = 0
             reward[2] = -0.5
@@ -483,7 +481,7 @@ class Jaywalker:
         
         plt.xlim(-1, self.dim_x+1)
         plt.ylim(-1, self.dim_y+1)
-        plt.pause(0.001)
+        #plt.pause(0.001)
 
 
 
@@ -1053,7 +1051,7 @@ if __name__ == "__main__":
     gamma = 0.95
     learning_rate = 1e-2 #5e-4
     epsilon_start = 1
-    epsilon_decay = 0.20 #0.997 0.995
+    epsilon_decay = 0.997 #0.995
     epsilon_min = 0.01
     batch_size = 256
     train_start = 1000
