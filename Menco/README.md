@@ -26,11 +26,9 @@ L'agente utilizza un Q-learning lessicografico, il che significa che considera l
 3.  **Priorità 3: Ottimizzare l'Allineamento/Evitare OOB (`reward[2]`)**
     * Infine, tra le azioni sicure e che massimizzano l'avanzamento, seleziona quelle che favoriscono il mantenimento della corsia corretta e l'evitamento dei bordi stradali.
 
-    {
-                        rew_mean = sum(self.score[-31:])/31
-                compl_mean = np.mean(self.completed[-31:])
-                act_mean = np.mean(self.num_actions[-31:])
-                bar.set_infos({'Speed_': f'{(time.time() - bar.start_time) / (bar.n+1):.2f}s/it',
-                                 'Collision': f'{rew_mean[0]:.2f}', 'Forward': f'{rew_mean[1]:.2f}', 'OOB': f'{rew_mean[2]:.2f}',
-                                        'Completed': f'{compl_mean:.2f}', "Actions": f'{act_mean:.2f}'})
-    }
+    rew_mean = sum(self.score[-31:])/31
+    compl_mean = np.mean(self.completed[-31:])
+    act_mean = np.mean(self.num_actions[-31:])
+    bar.set_infos({'Speed_': f'{(time.time() - bar.     start_time) / (bar.n+1):.2f}s/it',
+    'Collision': f'{rew_mean[0]:.2f}', 'Forward': f'{rew_mean[1]:.2f}', 'OOB': f'{rew_mean[2]:.2f}',
+    'Completed': f'{compl_mean:.2f}', "Actions": f'{act_mean:.2f}'})
