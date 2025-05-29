@@ -325,11 +325,8 @@ class Jaywalker:
 
         reward[2] /= self.scale_factor * 10
 
-
         inv_distance, angle = self.vision()
         inv_distance_obs, angle_obs = self.vision_obstacle()
-
-
         
         # trova ostacolo più vicino
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
@@ -1204,7 +1201,7 @@ if __name__ == "__main__":
                    replay_frequency, target_model_update_rate, memory_length, mini_batches, weights)
     
     agent.test_model(
-        model_path="Lex_jaywalker_QAgent_one_scenario.pt",
-        num_episodes=4,
+        model_path="one_scenario_best_model_episode2208_0_1.03_0_1.pt",
+        num_episodes=100,
         render=True
     )
