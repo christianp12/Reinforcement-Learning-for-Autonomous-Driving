@@ -184,7 +184,7 @@ class Jaywalker:
 
         self.noise = 1e-5
         self.sight = 40
-        self.sight_obstacle = 60
+        self.sight_obstacle = 70
 
         self.scale_factor = 100
 
@@ -369,9 +369,9 @@ class Jaywalker:
         self.obstacles = []
 
         # Alternanza scenari
-        self.last_scenario = getattr(self, 'last_scenario', 1)
-        current_scenario = 2 if self.last_scenario == 1 else 1
-        self.last_scenario = current_scenario
+        #self.last_scenario = getattr(self, 'last_scenario', 1)
+        #current_scenario = 2 if self.last_scenario == 1 else 1
+        #self.last_scenario = current_scenario
 
         self.car.reset(array([0.0, 2.5]))
         self.counter_iterations = 0
@@ -384,16 +384,16 @@ class Jaywalker:
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
         # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
-        if current_scenario == 1:
-            pos_x = self.dim_x  # molto lontano dal pedone
-            speed = 0.5         # lento
-            self.sight_obstacle = 60
+        #if current_scenario == 1:
+        pos_x = self.dim_x  # molto lontano dal pedone
+        speed = 0.5         # lento
+        self.sight_obstacle = 80
 
         # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
-        else:
-            pos_x = self.jaywalker[0] + 5  # vicino al pedone
-            speed = 0.5                    # veloce
-            self.sight_obstacle = 40
+        #else:
+        #    pos_x = self.jaywalker[0] + 5  # vicino al pedone
+        #    speed = 0.5                    # veloce
+        #    self.sight_obstacle = 70
 
         # Auto ostacolante nella corsia di sorpasso
         lane = self.lanes_y[1]
@@ -884,6 +884,10 @@ class QAgent():
 
     def learn(self):
         bar = qqdm(np.arange(self.episodes), desc="Learning")
+
+        best_completed = 0.0 # Track the best completition score
+        consecutive_successes = 0 # counter for consecutive completed episodes
+
         for e in bar:
         
             state = self.env.reset()
@@ -897,19 +901,12 @@ class QAgent():
                 action = self.act(state.unsqueeze(0))
                 next_state, reward, terminated, truncated, completed = self.env.step(action)
 
-                #MODIFICHE PER VEDERE GLI OSTACOLI
-                #if step % 10 == 0:  
                 self.env.render()
-
-                done = terminated or truncated
-                
+                done = terminated or truncated          
                 next_state = torch.tensor(next_state).to(device)
-
                 episode_score += reward
                 reward = torch.tensor(reward)
-                
                 self.add_experience(state, action, reward, next_state, terminated)
-                
                 state = next_state
                 
                 if (step & self.replay_frequency) == 0:
@@ -925,6 +922,41 @@ class QAgent():
                     self.epsilon_record.append(self.epsilon)
                     self.completed.append(completed)
                     self.num_actions.append(step)
+
+                # Update best completion score and check conditions
+                if completed:
+                    # Calculate moving averages over last 31 episodes (or all available if fewer)
+                    window_size = min(31, len(self.completed))
+                    
+                    # Collision score (index 0 in self.score)
+                    current_collisions = np.mean([s[0] for s in self.score[-window_size:]]) if self.score else 0
+                    
+                    # Completion rate
+                    current_completed = np.mean(self.completed[-window_size:]) if self.completed else 0
+                    
+                    # Update best completion score
+                    if current_completed > best_completed:
+                        best_completed = current_completed
+                        print(f"New best completion score: {best_completed:.2f} at episode {e}")
+                    
+                    # Check for model saving condition
+                    if current_collisions == 0 and current_completed > 0.96:
+                        save_path = f"best_model_episode_{e}.pt"
+                        torch.save(self.model.state_dict(), save_path)
+                        print(f"Model saved at episode {e}: Collision=0, Completed={current_completed:.2f}")
+                    
+                    # Update consecutive successes counter
+                    if current_completed > 0.93:
+                        consecutive_successes += 1
+                    else:
+                        if consecutive_successes > 0:
+                            print(f"{consecutive_successes} consecutive successes reset at episode {e}.")
+                            consecutive_successes = 0
+                    
+                    # Early stopping condition
+                    if consecutive_successes >= 100:
+                        print(f"Early stopping achieved at episode {e} with {consecutive_successes} consecutive successes.")
+                        break
 
             if e >= 31:
                 rew_mean = sum(self.score[-31:])/31
@@ -954,11 +986,11 @@ class QAgent():
         time = len(vs.oob)
         start = math.floor(N/2)
         end = time-start
-        self.plot_score(vs.collision, start, end, N, title + " collision", filename + str(self.env) + "_collision")
-        self.plot_score(vs.oob, start, end, N, title + " oob", filename + str(self.env) + "_oob")
-        self.plot_score(vs.distance, start, end, N, title + " distance", filename + str(self.env) + "_distance")
-        self.plot_score(self.completed, start, end, N, title + " completed", filename + str(self.env) + "_completed")
-        self.plot_score(self.num_actions, start, end, N, title + " actions", filename + str(self.env) + "_actions")
+        self.plot_score(vs.collision, start, end, N, title + " collision", filename + str(self.env) + "_collision_graph")
+        self.plot_score(vs.oob, start, end, N, title + " oob", filename + str(self.env) + "_oob_graph")
+        self.plot_score(vs.distance, start, end, N, title + " distance", filename + str(self.env) + "_distance_graph")
+        self.plot_score(self.completed, start, end, N, title + " completed", filename + str(self.env) + "_completed_graph")
+        self.plot_score(self.num_actions, start, end, N, title + " actions", filename + str(self.env) + "_actions_graph")
         
 
     def plot_epsilon(self, filename = ""):
@@ -1040,7 +1072,7 @@ class QAgent():
         
         plt.plot(jaywalker_position_x, jaywalker_position_y);
 
-        plt.savefig(path + str(self.env) + "_simulation_" + str(number));
+        plt.savefig(path + str(self.env) + "_simulation_" + str(number) + "_render.png");
         plt.clf();
 
 
@@ -1085,6 +1117,9 @@ if __name__ == "__main__":
     simulations = 0
 
     network_type = sys.argv[1]
+
+     # print used device
+    print(f"Device: {device}")
 
     #p = Pool(32)
     if network_type == "lex":
