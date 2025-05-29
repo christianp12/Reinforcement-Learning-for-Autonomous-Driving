@@ -881,6 +881,17 @@ class QAgent():
         
         self.model.eval()
 
+    
+    def adaptive_lr_decay(self, completion_rate, min_lr=5e-4, max_lr=1e-2):
+        # Inverse sigmoid shape: High lr at low performance, low lr at high performance
+        new_lr = min_lr + (max_lr - min_lr) * (1 - completion_rate)  # Linear decay
+        for param_group in self.model.optimizer.param_groups:
+            current_lr = param_group['lr']
+            if abs(current_lr - new_lr) > 1e-6:  # Only log when the change is significant
+                print(f"LR changed from {current_lr:.6f} to {new_lr:.6f}")
+                param_group['lr'] = new_lr
+
+
 
     def learn(self):
         bar = qqdm(np.arange(self.episodes), desc="Learning")
@@ -933,6 +944,9 @@ class QAgent():
                     
                     # Completion rate
                     current_completed = np.mean(self.completed[-window_size:]) if self.completed else 0
+
+                    self.adaptive_lr_decay(current_completed)
+
                     
                     # Update best completion score
                     if current_completed > best_completed:

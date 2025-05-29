@@ -393,26 +393,11 @@ class Jaywalker:
         # 1. First car at position 45 with speed 3
         self.obstacles.append({
             'type': 'car',
-            'pos': array([55, self.lanes_y[1]]),  # in the passing lane
-            'r': 2.0,
-            'v': 3
-        })
-        
-        # 2. Second car at position 100 with speed 0.5
-        self.obstacles.append({
-            'type': 'car',
             'pos': array([100, self.lanes_y[1]]),  # in the passing lane
             'r': 2.0,
-            'v': 2
+            'v': 0.5
         })
 
-        # 3. Third car
-        self.obstacles.append({
-            'type': 'car',
-            'pos': array([110, self.lanes_y[1]]),  # in the passing lane
-            'r': 2.0,
-            'v': 2
-        })
 
         # Stato iniziale
         inv_distance, angle = self.vision()
@@ -1204,7 +1189,7 @@ if __name__ == "__main__":
                    replay_frequency, target_model_update_rate, memory_length, mini_batches, weights)
     
     agent.test_model(
-        model_path="one_scenario_best_model_episode2208_0_1.03_0_1.pt",
+        model_path="best_model_2978_0_1.pt",
         num_episodes=10,
         render=True
     )
