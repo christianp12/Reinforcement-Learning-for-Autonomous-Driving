@@ -365,7 +365,6 @@ class Jaywalker:
 
 
     def reset(self):
-
         # ==== GRAFICA VELOCITÀ-TEMPO ====
         # azzero la storia della velocità e del tempo
         self.velocity_history = []
@@ -379,9 +378,9 @@ class Jaywalker:
         self.time_steps = []
 
         # Alternanza scenari
-        self.last_scenario = getattr(self, 'last_scenario', 1)
-        current_scenario = 2 if self.last_scenario == 1 else 1
-        self.last_scenario = current_scenario
+        #self.last_scenario = getattr(self, 'last_scenario', 1)
+        #current_scenario = 2 if self.last_scenario == 1 else 1
+        #self.last_scenario = current_scenario
 
         self.car.reset(array([0.0, 2.5]))
         self.counter_iterations = 0
@@ -393,25 +392,29 @@ class Jaywalker:
         self.jaywalker_max = self.jaywalker + self.jaywalker_r
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
-        # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
-        if current_scenario == 1:
-            pos_x = self.dim_x  # molto lontano dal pedone
-            speed = 0.5         # lento
-            self.sight_obstacle = 80
-
-        # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
-        else:
-            pos_x = self.jaywalker[0] + 5  # vicino al pedone
-            speed = 4                    # veloce
-            self.sight_obstacle = 80
-
-        # Auto ostacolante nella corsia di sorpasso
-        lane = self.lanes_y[1]
+        # Always add two cars:
+        # 1. First car at position 45 with speed 3
         self.obstacles.append({
             'type': 'car',
-            'pos': array([pos_x, lane]),
+            'pos': array([55, self.lanes_y[1]]),  # in the passing lane
             'r': 2.0,
-            'v': speed
+            'v': 3
+        })
+        
+        # 2. Second car at position 100 with speed 0.5
+        self.obstacles.append({
+            'type': 'car',
+            'pos': array([100, self.lanes_y[1]]),  # in the passing lane
+            'r': 2.0,
+            'v': 2
+        })
+
+        # 3. Third car
+        self.obstacles.append({
+            'type': 'car',
+            'pos': array([110, self.lanes_y[1]]),  # in the passing lane
+            'r': 2.0,
+            'v': 2
         })
 
         # Stato iniziale
@@ -1204,7 +1207,7 @@ if __name__ == "__main__":
                    replay_frequency, target_model_update_rate, memory_length, mini_batches, weights)
     
     agent.test_model(
-        model_path="Lex_jaywalker_QAgent_one_scenario.pt",
-        num_episodes=4,
+        model_path="one_scenario_best_model_episode2208_0_1.03_0_1.pt",
+        num_episodes=10,
         render=True
     )

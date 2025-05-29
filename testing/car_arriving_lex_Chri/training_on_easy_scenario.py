@@ -387,7 +387,7 @@ class Jaywalker:
         #if current_scenario == 1:
         pos_x = self.dim_x  # molto lontano dal pedone
         speed = 0.5         # lento
-        self.sight_obstacle = 80
+        self.sight_obstacle = 70
 
         # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
         #else:
