@@ -139,7 +139,7 @@ class Jaywalker:
         
 
         if not hasattr(self, 'car_img'):
-            self.car_img = mpimg.imread("car/carontop.png")  # ← metti il file nella stessa cartella
+            self.car_img = mpimg.imread("../car/carontop.png")  # ← metti il file nella stessa cartella
 
 
         self.reward_size = 3
@@ -184,7 +184,7 @@ class Jaywalker:
 
         self.noise = 1e-5
         self.sight = 40
-        self.sight_obstacle = 70
+        self.sight_obstacle = 60
 
         self.scale_factor = 100
 
@@ -325,8 +325,11 @@ class Jaywalker:
 
         reward[2] /= self.scale_factor * 10
 
+
         inv_distance, angle = self.vision()
         inv_distance_obs, angle_obs = self.vision_obstacle()
+
+
         
         # trova ostacolo più vicino
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
@@ -362,22 +365,13 @@ class Jaywalker:
 
 
     def reset(self):
-        # ==== GRAFICA VELOCITÀ-TEMPO ====
-        # azzero la storia della velocità e del tempo
-        self.velocity_history = []
-        self.time_steps = []
-        # ===============================
 
         self.obstacles = []
 
-        #azzero la velocità passata della macchina ad ogni step
-        self.velocity_history = []
-        self.time_steps = []
-
         # Alternanza scenari
-        #self.last_scenario = getattr(self, 'last_scenario', 1)
-        #current_scenario = 2 if self.last_scenario == 1 else 1
-        #self.last_scenario = current_scenario
+        self.last_scenario = getattr(self, 'last_scenario', 1)
+        current_scenario = 2 if self.last_scenario == 1 else 1
+        self.last_scenario = current_scenario
 
         self.car.reset(array([0.0, 2.5]))
         self.counter_iterations = 0
@@ -389,29 +383,25 @@ class Jaywalker:
         self.jaywalker_max = self.jaywalker + self.jaywalker_r
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
-        # Always add two cars:
-        # 1. First car at position 45 with speed 3
-        self.obstacles.append({
-            'type': 'car',
-            'pos': array([55, self.lanes_y[1]]),  # in the passing lane
-            'r': 2.0,
-            'v': 3
-        })
-        
-        # 2. Second car at position 100 with speed 0.5
-        self.obstacles.append({
-            'type': 'car',
-            'pos': array([100, self.lanes_y[1]]),  # in the passing lane
-            'r': 2.0,
-            'v': 2
-        })
+        # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
+        if current_scenario == 1:
+            pos_x = self.dim_x  # molto lontano dal pedone
+            speed = 0.5         # lento
+            self.sight_obstacle = 60
 
-        # 3. Third car
+        # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
+        else:
+            pos_x = self.jaywalker[0] + 5  # vicino al pedone
+            speed = 0.5                    # veloce
+            self.sight_obstacle = 40
+
+        # Auto ostacolante nella corsia di sorpasso
+        lane = self.lanes_y[1]
         self.obstacles.append({
             'type': 'car',
-            'pos': array([110, self.lanes_y[1]]),  # in the passing lane
+            'pos': array([pos_x, lane]),
             'r': 2.0,
-            'v': 2
+            'v': speed
         })
 
         # Stato iniziale
@@ -445,57 +435,46 @@ class Jaywalker:
     def __str__(self):
         return "jaywalker"
     
+    #MODIFICHE PER VEDERE GLI OSTACOLI
     def render(self):
-
-        # ===== GRAFICO VELOCITÀ-TEMPO =====
-
-        if not hasattr(self, "velocity_history"):
-            self.velocity_history = []
-            self.time_steps = []
-
-        # =======================================
-
-        # creo la velocità della macchina passata
-        self.velocity_history.append(self.car.v)
-        self.time_steps.append(len(self.time_steps))
-
         plt.clf()
-        fig = plt.gcf()
-        fig.set_size_inches(10, 6)  # Allarga la finestra
-        ax1 = plt.subplot2grid((2, 1), (0, 0))  # Strada
-        ax2 = plt.subplot2grid((2, 1), (1, 0))  # Grafico velocità-tempo
-
-        # === GRAFICA STRADA (ax1) ===
+        ax = plt.gca()
         road = mpatches.Rectangle((0, 0), self.dim_x, self.dim_y,
-                              facecolor='black', edgecolor='none')
-        ax1.add_patch(road)
+                                  facecolor='black', edgecolor='none')
+        ax.add_patch(road)
 
         gx = self.goal[0]
-        ax1.plot([gx, gx], [0, self.dim_y],
-             color='lime', linewidth=2,
-             linestyle=(0, (5, 5)),
-             label='Finish')
+        ax.plot([gx, gx], [0, self.dim_y],
+            color='lime', linewidth=2,
+            linestyle=(0, (5, 5)),
+            label='Finish')
 
-        ax1.plot([0, self.dim_x], [0, 0], color='white', linewidth=2)
-        ax1.plot([0, self.dim_x], [self.dim_y, self.dim_y], color='white', linewidth=2)
+        # 2) linee di bordo continue – bianche
+        plt.plot([0, self.dim_x], [0, 0], color='white', linewidth=2)
+        plt.plot([0, self.dim_x], [self.dim_y, self.dim_y], color='white', linewidth=2)
+
+        # 3) linea centrale tratteggiata – bianca
         mid_y = self.dim_y / 2
-        ax1.plot([0, self.dim_x], [mid_y, mid_y],
-             color='white', linewidth=1,
-             linestyle=(0, (10, 10)))
+        plt.plot([0, self.dim_x], [mid_y, mid_y],
+                 color='white', linewidth=1,
+                 linestyle=(0, (10, 10))) 
 
+        #PEDONE COME CERCHIO ROSSO
         circle_j = plt.Circle(self.jaywalker, self.jaywalker_r, color='red', alpha=0.5)
-        ax1.add_patch(circle_j)
+        plt.gca().add_patch(circle_j)
 
+       #GLI OSTACOLI POSSONO ESSERE MACCHINE (ARANCIONI)
         for obs in getattr(self, 'obstacles', []):
-            c = 'orange' if obs['type'] == 'car' else 'green'
+            c = 'orange' if obs['type']=='car' else 'green'
             circle_o = plt.Circle(obs['pos'], obs['r'], color=c, alpha=0.5)
-            ax1.add_patch(circle_o)
+            plt.gca().add_patch(circle_o)
 
         car = self.car
         car_length = 4.0
         car_width = 4.0
         arg = car.phi + car.beta
 
+# Coordinate per posizionare l'immagine
         extent = [
             car.position[0] - car_length / 2,
             car.position[0] + car_length / 2,
@@ -503,26 +482,23 @@ class Jaywalker:
             car.position[1] + car_width / 2
         ]
 
+# Trasformazione per ruotare l'immagine
         img_transform = transforms.Affine2D().rotate_around(
             car.position[0], car.position[1], arg
-        ) + ax1.transData
+        ) + plt.gca().transData
 
-        ax1.imshow(self.car_img, extent=extent, transform=img_transform, zorder=5)
+# Mostra immagine dell’auto
+        plt.imshow(self.car_img, extent=extent, transform=img_transform, zorder=5)
 
-        ax1.set_xlim(-1, self.dim_x + 1)
-        ax1.set_ylim(-1, self.dim_y + 1)
-        ax1.set_title("Autonomous Car Environment")
 
-        # === GRAFICO VELOCITÀ-TEMPO (ax2) ===
-        ax2.plot(self.time_steps, self.velocity_history, color='cyan', linewidth=2)
-        ax2.set_xlim(left=max(0, len(self.time_steps)-100), right=len(self.time_steps))
-        ax2.set_ylim(0, max(1, max(self.velocity_history) * 1.1))
-        ax2.set_title("Velocity over Time")
-        ax2.set_xlabel("Time Step")
-        ax2.set_ylabel("Velocity")
-    # ====================================
 
-        plt.tight_layout()
+        blue_patch = mpatches.Patch(color='blue', label='Your Car')
+        red_patch = mpatches.Patch(color='red', label='Jaywalker')
+        orange_patch = mpatches.Patch(color='orange', label='Obstacle Car')
+        #plt.legend(handles=[blue_patch, red_patch, orange_patch])
+        
+        plt.xlim(-1, self.dim_x+1)
+        plt.ylim(-1, self.dim_y+1)
         plt.pause(0.001)
 
 
@@ -908,10 +884,6 @@ class QAgent():
 
     def learn(self):
         bar = qqdm(np.arange(self.episodes), desc="Learning")
-
-        best_completed = 0.0 # Track the best completition score
-        consecutive_successes = 0 # counter for consecutive completed episodes
-
         for e in bar:
         
             state = self.env.reset()
@@ -925,12 +897,19 @@ class QAgent():
                 action = self.act(state.unsqueeze(0))
                 next_state, reward, terminated, truncated, completed = self.env.step(action)
 
+                #MODIFICHE PER VEDERE GLI OSTACOLI
+                #if step % 10 == 0:  
                 self.env.render()
-                done = terminated or truncated          
+
+                done = terminated or truncated
+                
                 next_state = torch.tensor(next_state).to(device)
+
                 episode_score += reward
                 reward = torch.tensor(reward)
+                
                 self.add_experience(state, action, reward, next_state, terminated)
+                
                 state = next_state
                 
                 if (step & self.replay_frequency) == 0:
@@ -946,41 +925,6 @@ class QAgent():
                     self.epsilon_record.append(self.epsilon)
                     self.completed.append(completed)
                     self.num_actions.append(step)
-
-                # Update best completion score and check conditions
-                if completed:
-                    # Calculate moving averages over last 31 episodes (or all available if fewer)
-                    window_size = min(31, len(self.completed))
-                    
-                    # Collision score (index 0 in self.score)
-                    current_collisions = np.mean([s[0] for s in self.score[-window_size:]]) if self.score else 0
-                    
-                    # Completion rate
-                    current_completed = np.mean(self.completed[-window_size:]) if self.completed else 0
-                    
-                    # Update best completion score
-                    if current_completed > best_completed:
-                        best_completed = current_completed
-                        print(f"New best completion score: {best_completed:.2f} at episode {e}")
-                    
-                    # Check for model saving condition
-                    if current_collisions == 0 and current_completed > 0.96:
-                        save_path = f"best_model_episode_{e}.pt"
-                        torch.save(self.model.state_dict(), save_path)
-                        print(f"Model saved at episode {e}: Collision=0, Completed={current_completed:.2f}")
-                    
-                    # Update consecutive successes counter
-                    if current_completed > 0.96:
-                        consecutive_successes += 1
-                    else:
-                        if consecutive_successes > 0:
-                            print(f"{consecutive_successes} consecutive successes reset at episode {e}.")
-                            consecutive_successes = 0
-                    
-                    # Early stopping condition
-                    if consecutive_successes >= 100:
-                        print(f"Early stopping achieved at episode {e} with {consecutive_successes} consecutive successes.")
-                        break
 
             if e >= 31:
                 rew_mean = sum(self.score[-31:])/31
@@ -1099,41 +1043,6 @@ class QAgent():
         plt.savefig(path + str(self.env) + "_simulation_" + str(number));
         plt.clf();
 
-    def test_model(self, model_path, num_episodes=10, render=True):
-        """
-        Test the trained model after training.
-        """
-        self.model.load_state_dict(torch.load(model_path, map_location=device))
-        self.model.eval()
-
-        success_rate = 0
-        collision_rate = 0
-
-        for episode in range(num_episodes):
-            state = self.env.reset()
-            state = torch.tensor(state).to(device)
-            done = False
-
-            while not done:
-                if render:
-                    self.env.render()
-
-                with torch.no_grad():
-                    Q = self.model(state.unsqueeze(0)).squeeze()
-                    action = self.greedy_arglexmax(Q)
-
-                next_state, _, terminated, truncated, completed = self.env.step(action)
-                done = terminated or truncated
-                state = torch.tensor(next_state).to(device)
-
-            # Update success and collision rates
-            success_rate += int(completed)
-            collision_rate += int(terminated and not completed)
-
-        print(f"Test Results ({num_episodes} episodes):")
-        print(f"- Success Rate: {success_rate / num_episodes * 100:.2f}%")
-        print(f"- Collision Rate: {collision_rate / num_episodes * 100:.2f}%")
-
 
 def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
                 replay_frequency, target_model_update_rate, memory_length, mini_batches, weights, img_filename, simulations_filename, num_simulations, version = ""):
@@ -1149,9 +1058,8 @@ def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_st
     for i in np.arange(num_simulations):
         agent.simulate(i, simulations_filename + str(agent.model) + "_" + version)
     
-    agent.save_model(str(agent.model) + "_" + version)
+    agent.save_model("agents/alternated_scenarios")
 
-    
 
 if __name__ == "__main__":
     
@@ -1200,11 +1108,12 @@ if __name__ == "__main__":
     else:
         raise ValueError("Network type" + network_type + "unknown")
 
-    agent = QAgent(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
-                   replay_frequency, target_model_update_rate, memory_length, mini_batches, weights)
-    
-    agent.test_model(
-        model_path="one_scenario_best_model_episode2208_0_1.03_0_1.pt",
-        num_episodes=10,
-        render=True
-    )
+    if simulations > 1:
+        for i in np.arange(simulations):
+            w = weights_list[i]
+
+            main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
+                replay_frequency, target_model_update_rate, memory_length, mini_batches, w, img_filename, simulations_filename, num_simulations, "v" + str(i) + "_")
+    else:
+        main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
+                replay_frequency, target_model_update_rate, memory_length, mini_batches, weights, img_filename, simulations_filename, num_simulations)
