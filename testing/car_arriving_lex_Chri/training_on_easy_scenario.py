@@ -184,7 +184,7 @@ class Jaywalker:
 
         self.noise = 1e-5
         self.sight = 40
-        self.sight_obstacle = 70
+        self.sight_obstacle = 80
 
         self.scale_factor = 100
 
@@ -242,12 +242,12 @@ class Jaywalker:
         distance = np.linalg.norm(vector_to_jaywalker)
 
         if self.car.position[0] >= self.jaywalker[0] or distance > self.sight:
-            return 0, -np.pi
+            return 0, -np.pi, float('inf')
 
         angle = np.arctan2(vector_to_jaywalker[1], vector_to_jaywalker[0])
         inv_distance = 1 / distance
 
-        return inv_distance, angle
+        return inv_distance, angle, distance
 
 
     def vision_obstacle(self):
@@ -321,17 +321,31 @@ class Jaywalker:
         # collision with borders
         if self.car.front[1] > self.dim_y or self.car.front[1] < 0 or self.car.back[1] > self.dim_y or self.car.back[1] < 0 or self.car.position[0] < 0 or self.car.front[0] < 0:
             reward[2] -= 1000
-            terminated = True
+            terminated = True 
+        # distance from center of own lane
+        else:
+            # computes a distance-based penalty to encourage the car to stay centered in its lane
+            reward[2] = -np.abs(self.car.position[1] - self.goal[1])
 
         reward[2] /= self.scale_factor * 10
 
 
-        inv_distance, angle = self.vision()
-        inv_distance_obs, angle_obs = self.vision_obstacle()
+        inv_distance, angle, jaywalker_distance = self.vision()
+
+        # Find closest object
+        obs_distance = float('inf')
+        if self.obstacles:
+            obs_distances = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
+            obs_distance = min(obs_distances)
+        
+        # Call  vision_obstacle if jaywalker is detected or closest obstacle is closer than jaywalker
+        if jaywalker_distance < float('inf') or obs_distance < jaywalker_distance:
+            inv_distance_obs, angle_obs = self.vision_obstacle()
+        else:
+            inv_distance_obs, angle_obs = 0, -np.pi
 
 
         
-        # trova ostacolo più vicino
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
         obs = self.obstacles[i_min]
@@ -387,7 +401,7 @@ class Jaywalker:
         #if current_scenario == 1:
         pos_x = self.dim_x  # molto lontano dal pedone
         speed = 0.5         # lento
-        self.sight_obstacle = 70
+        self.sight_obstacle = 80
 
         # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
         #else:
@@ -405,7 +419,7 @@ class Jaywalker:
         })
 
         # Stato iniziale
-        inv_distance, angle = self.vision()
+        inv_distance, angle, jaywalker_distance = self.vision()
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
         obs = self.obstacles[i_min]
@@ -413,7 +427,19 @@ class Jaywalker:
         angle_obs = np.arctan((obs['pos'][1] - self.car.position[1]) / (obs['pos'][0] - self.car.position[0] + self.noise))
         lane_idx = min(range(len(self.lanes_y)), key=lambda i: abs(self.car.position[1] - self.lanes_y[i]))
 
-        inv_distance_obs, angle_obs = self.vision_obstacle()
+
+        # Find closest object
+        obs_distance = float('inf')
+        if self.obstacles:
+            obs_distances = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
+            obs_distance = min(obs_distances)
+        
+        # Call  vision_obstacle if jaywalker is detected or closest obstacle is closer than jaywalker
+        if jaywalker_distance < float('inf') or obs_distance < jaywalker_distance:
+            inv_distance_obs, angle_obs = self.vision_obstacle()
+        else:
+            inv_distance_obs, angle_obs = 0, -np.pi
+        
 
         return array([
             self.car.position[1],

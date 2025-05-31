@@ -184,7 +184,7 @@ class Jaywalker:
 
         self.noise = 1e-5
         self.sight = 40
-        self.sight_obstacle = 90
+        self.sight_obstacle = 80
 
         self.scale_factor = 100
 
@@ -401,29 +401,22 @@ class Jaywalker:
         #if current_scenario == 1:
         #pos_x = self.dim_x  # molto lontano dal pedone
         #speed = 0.5         # lento
+        #self.sight_obstacle = 80
 
         # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
         #else:
         #    pos_x = self.jaywalker[0] + 5  # vicino al pedone
-        #   speed = 0.5                    # veloce
+        #    speed = 0.5                    # veloce
+        #    self.sight_obstacle = 70
 
         # Auto ostacolante nella corsia di sorpasso
         lane = self.lanes_y[1]
         self.obstacles.append({
             'type': 'car',
-            'pos': array([100, lane]),
+            'pos': array([65, lane]),
             'r': 2.0,
             'v': 0.5
         })
-
-        # Auto ostacolante nella corsia di sorpasso
-        #lane = self.lanes_y[1]
-        #self.obstacles.append({
-        #    'type': 'car',
-         #   'pos': array([55, lane]),
-        #    'r': 2.0,
-         #   'v': 4
-        #})
 
         # Stato iniziale
         inv_distance, angle, jaywalker_distance = self.vision()
@@ -914,6 +907,17 @@ class QAgent():
         
         self.model.eval()
 
+    
+    def adaptive_lr_decay(self, completion_rate, min_lr=5e-4, max_lr=1e-2):
+        # Inverse sigmoid shape: High lr at low performance, low lr at high performance
+        new_lr = min_lr + (max_lr - min_lr) * (1 - completion_rate)  # Linear decay
+        for param_group in self.model.optimizer.param_groups:
+            current_lr = param_group['lr']
+            if abs(current_lr - new_lr) > 1e-6:  # Only log when the change is significant
+                print(f"LR changed from {current_lr:.6f} to {new_lr:.6f}")
+                param_group['lr'] = new_lr
+
+
 
     def learn(self):
         bar = qqdm(np.arange(self.episodes), desc="Learning")
@@ -966,6 +970,9 @@ class QAgent():
                     
                     # Completion rate
                     current_completed = np.mean(self.completed[-window_size:]) if self.completed else 0
+
+                    #self.adaptive_lr_decay(current_completed)
+
                     
                     # Update best completion score
                     if current_completed > best_completed:
@@ -979,7 +986,7 @@ class QAgent():
                         print(f"Model saved at episode {e}: Collision=0, Completed={current_completed:.2f}")
                     
                     # Update consecutive successes counter
-                    if current_completed > 0.96:
+                    if current_completed > 0.93:
                         consecutive_successes += 1
                     else:
                         if consecutive_successes > 0:
@@ -1019,11 +1026,11 @@ class QAgent():
         time = len(vs.oob)
         start = math.floor(N/2)
         end = time-start
-        self.plot_score(vs.collision, start, end, N, title + " collision", filename + str(self.env) + "_collision")
-        self.plot_score(vs.oob, start, end, N, title + " oob", filename + str(self.env) + "_oob")
-        self.plot_score(vs.distance, start, end, N, title + " distance", filename + str(self.env) + "_distance")
-        self.plot_score(self.completed, start, end, N, title + " completed", filename + str(self.env) + "_completed")
-        self.plot_score(self.num_actions, start, end, N, title + " actions", filename + str(self.env) + "_actions")
+        self.plot_score(vs.collision, start, end, N, title + " collision", filename + str(self.env) + "_collision_graph")
+        self.plot_score(vs.oob, start, end, N, title + " oob", filename + str(self.env) + "_oob_graph")
+        self.plot_score(vs.distance, start, end, N, title + " distance", filename + str(self.env) + "_distance_graph")
+        self.plot_score(self.completed, start, end, N, title + " completed", filename + str(self.env) + "_completed_graph")
+        self.plot_score(self.num_actions, start, end, N, title + " actions", filename + str(self.env) + "_actions_graph")
         
 
     def plot_epsilon(self, filename = ""):
@@ -1105,43 +1112,8 @@ class QAgent():
         
         plt.plot(jaywalker_position_x, jaywalker_position_y);
 
-        plt.savefig(path + str(self.env) + "_simulation_" + str(number));
+        plt.savefig(path + str(self.env) + "_simulation_" + str(number) + "_render.png");
         plt.clf();
-
-    def test_model(self, model_path, num_episodes=10, render=True):
-        """
-        Test the trained model after training.
-        """
-        self.model.load_state_dict(torch.load(model_path, map_location=device))
-        self.model.eval()
-
-        success_rate = 0
-        collision_rate = 0
-
-        for episode in range(num_episodes):
-            state = self.env.reset()
-            state = torch.tensor(state).to(device)
-            done = False
-
-            while not done:
-                if render:
-                    self.env.render()
-
-                with torch.no_grad():
-                    Q = self.model(state.unsqueeze(0)).squeeze()
-                    action = self.greedy_arglexmax(Q)
-
-                next_state, _, terminated, truncated, completed = self.env.step(action)
-                done = terminated or truncated
-                state = torch.tensor(next_state).to(device)
-
-            # Update success and collision rates
-            success_rate += int(completed)
-            collision_rate += int(terminated and not completed)
-
-        print(f"Test Results ({num_episodes} episodes):")
-        print(f"- Success Rate: {success_rate / num_episodes * 100:.2f}%")
-        print(f"- Collision Rate: {collision_rate / num_episodes * 100:.2f}%")
 
 
 def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
@@ -1160,7 +1132,6 @@ def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_st
     
     agent.save_model(str(agent.model) + "_" + version)
 
-    
 
 if __name__ == "__main__":
     
@@ -1187,6 +1158,9 @@ if __name__ == "__main__":
 
     network_type = sys.argv[1]
 
+     # print used device
+    print(f"Device: {device}")
+
     #p = Pool(32)
     if network_type == "lex":
         network = Lex_Q_Network
@@ -1209,12 +1183,12 @@ if __name__ == "__main__":
     else:
         raise ValueError("Network type" + network_type + "unknown")
 
-    agent = QAgent(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
-                   replay_frequency, target_model_update_rate, memory_length, mini_batches, weights)
-    
+    if simulations > 1:
+        for i in np.arange(simulations):
+            w = weights_list[i]
 
-    agent.test_model(
-        model_path="one_scenario_final_model_(worse).pt",
-        num_episodes=10,
-        render=True
-    )
+            main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
+                replay_frequency, target_model_update_rate, memory_length, mini_batches, w, img_filename, simulations_filename, num_simulations, "v" + str(i) + "_")
+    else:
+        main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
+                replay_frequency, target_model_update_rate, memory_length, mini_batches, weights, img_filename, simulations_filename, num_simulations)
