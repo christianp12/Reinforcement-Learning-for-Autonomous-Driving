@@ -404,13 +404,24 @@ class Jaywalker:
 
         # Auto ostacolante nella corsia di sorpasso
         lane = self.lanes_y[1]
-        self.obstacles.append({
+        speed = 4 
+        pos_x = 50
+        #first car
+        self.obstacles.append({ 
             'type': 'car',
             'pos': array([pos_x, lane]),
             'r': 2.0,
             'v': speed
         })
 
+        pos_x = 100
+        #second car
+        self.obstacles.append({ 
+            'type': 'car',
+            'pos': array([pos_x, lane]),
+            'r': 2.0,
+            'v': speed
+        })
         # Stato iniziale
         inv_distance, angle = self.vision()
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
@@ -1157,9 +1168,9 @@ if __name__ == "__main__":
     replay_frequency = 3
     gamma = 0.95
     learning_rate = 1e-2 #5e-4
-    epsilon_start = 1
-    epsilon_decay = 0.997 #0.995
-    epsilon_min = 0.01
+    epsilon_start = 0
+    epsilon_decay = 0.0 #0.995
+    epsilon_min = 0.00
     batch_size = 256
     train_start = 1000
     target_model_update_rate = 1e-3
@@ -1201,7 +1212,7 @@ if __name__ == "__main__":
                    replay_frequency, target_model_update_rate, memory_length, mini_batches, weights)
     
     agent.test_model(
-        model_path="one_scenario_best_model_episode2208_0_1.03_0_1.pt",
-        num_episodes=100,
+        model_path="best_model_episode_2895.pt",
+        num_episodes=6,
         render=True
     )

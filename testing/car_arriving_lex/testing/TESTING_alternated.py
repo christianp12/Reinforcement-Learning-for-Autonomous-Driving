@@ -143,7 +143,7 @@ class Jaywalker:
         # self.brake_max   = -5.0   # accelerazione di frenata massima
 
         if not hasattr(self, 'car_img'):
-            self.car_img = mpimg.imread("car/carontop.png")  # ← metti il file nella stessa cartella
+            self.car_img = mpimg.imread("../car/carontop.png")  # ← metti il file nella stessa cartella
 
 
 
@@ -1151,7 +1151,7 @@ if __name__ == "__main__":
                    replay_frequency, target_model_update_rate, memory_length, mini_batches, weights)
     
     agent.test_model(
-        model_path="Lex_jaywalker_QAgent.pt",
+        model_path="agents/alternated_scenarios.pt",
         num_episodes=100,
         render=True
     )

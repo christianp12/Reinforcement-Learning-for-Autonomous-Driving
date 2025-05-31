@@ -164,7 +164,7 @@ class Jaywalker:
 
         #self.df = [-np.pi/9, -np.pi/18, 0, np.pi/18, np.pi/9]
         self.df = [-np.pi/18, 0, np.pi/18]
-        self.a = [-2, 0, 2] #[-5, 0, 5]
+        self.a = [-5, 0, 5]
         self.actions = [p for p in itertools.product(self.df, self.a)]
 
         self.num_df_actions = len(self.df)
@@ -183,8 +183,8 @@ class Jaywalker:
         self.prev_target_distance = np.linalg.norm(self.car.front - self.goal)
 
         self.noise = 1e-5
-        self.sight = 40
-        self.sight_obstacle = 60
+        self.sight = 30
+        self.sight_obstacle = 70
 
         self.scale_factor = 100
 
@@ -275,38 +275,48 @@ class Jaywalker:
         return inv_distance, angle
 
 
+    def is_own_lane_blocked(self, threshold=15.0):
+        car_lane_y = self.lanes_y[min(range(len(self.lanes_y)), key=lambda i: abs(self.car.position[1] - self.lanes_y[i]))]
+        for obs in self.obstacles:
+            if abs(obs['pos'][1] - car_lane_y) < self.lane_width / 2:
+                if 0 < obs['pos'][0] - self.car.position[0] < threshold:
+                    return True
+        return False
+
 
     def step(self, action):
 
-        # MODIFICHE PER MOVIMENTO JAYWALKER
-        self.jaywalker[1] += self.jaywalker_speed * self.jaywalker_dir
-        # -- se il pedone esce dalla corsia sbuca da sotto  
-        if self.jaywalker[1] < 0 or self.jaywalker[1] > self.dim_y:
-            # riparti daccapo: nuova X e inverti direzione
-            self.jaywalker[0] = random.uniform(self.dim_x/2, self.dim_x)
-            self.jaywalker_dir *= -1
-            # correggi Y all’interno
-            self.jaywalker[1] = np.clip(self.jaywalker[1], 0, self.dim_y)
-        # aggiorna bounding box del pedone
-        self.jaywalker_max = self.jaywalker + self.jaywalker_r
-        self.jaywalker_min = self.jaywalker - self.jaywalker_r
-
-
-        #modifiche per aggiunta dinamica di ostacoli
-        for obs in self.obstacles:
-            obs['pos'][0] -= obs['v']  # si muovono verso sinistra
+        # # MODIFICHE PER MOVIMENTO JAYWALKER
+        # self.jaywalker[1] += self.jaywalker_speed * self.jaywalker_dir
+        # # -- se il pedone esce dalla corsia sbuca da sotto  
+        # if self.jaywalker[1] < 0 or self.jaywalker[1] > self.dim_y:
+        #     # riparti daccapo: nuova X e inverti direzione
+        #     self.jaywalker[0] = random.uniform(self.dim_x/2, self.dim_x)
+        #     self.jaywalker_dir *= -1
+        #     # correggi Y all’interno
+        #     self.jaywalker[1] = np.clip(self.jaywalker[1], 0, self.dim_y)
+        # # aggiorna bounding box del pedone
+        # self.jaywalker_max = self.jaywalker + self.jaywalker_r
+        # self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
         df, a = self.actions[action]
-        self.car.move(df, a) # default ripropaga l'accellerazione, altrimenti la modifico
+        self.car.move(df, a) 
 
         reward = np.zeros(self.reward_size)
         terminated = False
         completed = False
 
+        #modifiche per aggiunta dinamica di ostacoli
+        for obs in self.obstacles:
+            obs['pos'][0] -= obs['v']  # si muovono verso sinistra
+
         if self.collision_with_jaywalker(): # collision with jaywalker
-            reward[0] = -10
+            reward[0] = -10 # 10
             terminated = True
 
+        if self.collision_with_obstacle(): # collision with jaywalker
+            reward[0] = -10 # 10
+            terminated = True
 
         # distance from target
         reward[1] = (self.car.position[0] - self.car.prev_position[0])/self.scale_factor
@@ -320,17 +330,21 @@ class Jaywalker:
 
         # collision with borders
         if self.car.front[1] > self.dim_y or self.car.front[1] < 0 or self.car.back[1] > self.dim_y or self.car.back[1] < 0 or self.car.position[0] < 0 or self.car.front[0] < 0:
-            reward[2] -= 1000
+            reward[2] -= 1000 # 1000
             terminated = True
+        else:  
+            reward[2] = -np.abs(self.car.position[1] - self.goal[1])
 
         reward[2] /= self.scale_factor * 10
 
-
         inv_distance, angle = self.vision()
-        inv_distance_obs, angle_obs = self.vision_obstacle()
+
+        if self.is_own_lane_blocked():
+            inv_distance_obs, angle_obs = self.vision_obstacle()
+        else:
+            inv_distance_obs, angle_obs = 0.0, -np.pi
 
 
-        
         # trova ostacolo più vicino
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
@@ -348,18 +362,11 @@ class Jaywalker:
             float(lane_idx)
         ])
 
-        min_dist = 1 / inv_d_obs
-
-
         self.counter_iterations += 1
         truncated = False
 
         if self.counter_iterations >= self.max_iterations:
             truncated = True
-
-        if self.collision_with_obstacle():
-            reward[0] -= 10
-            terminated = True
 
         return state, reward, terminated, truncated, completed
 
@@ -369,9 +376,9 @@ class Jaywalker:
         self.obstacles = []
 
         # Alternanza scenari
-        self.last_scenario = getattr(self, 'last_scenario', 1)
-        current_scenario = 2 if self.last_scenario == 1 else 1
-        self.last_scenario = current_scenario
+        # self.last_scenario = getattr(self, 'last_scenario', 1)
+        # current_scenario = 2 if self.last_scenario == 1 else 1
+        # self.last_scenario = current_scenario
 
         self.car.reset(array([0.0, 2.5]))
         self.counter_iterations = 0
@@ -383,17 +390,17 @@ class Jaywalker:
         self.jaywalker_max = self.jaywalker + self.jaywalker_r
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
-        # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
-        if current_scenario == 1:
-            pos_x = self.dim_x  # molto lontano dal pedone
-            speed = 0.5         # lento
-            self.sight_obstacle = 60
+        # # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
+        # if current_scenario == 1:
+        #     pos_x = self.dim_x  # molto lontano dal pedone
+        #     speed = 0.5         # lento
+        #     self.sight_obstacle = 70
 
-        # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
-        else:
-            pos_x = self.jaywalker[0] + 5  # vicino al pedone
-            speed = 0.5                    # veloce
-            self.sight_obstacle = 40
+        # # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
+        # else:
+        pos_x = self.jaywalker[0] + 5  # vicino al pedone
+        speed = 1                    # veloce
+        self.sight_obstacle = 70
 
         # Auto ostacolante nella corsia di sorpasso
         lane = self.lanes_y[1]
@@ -413,7 +420,7 @@ class Jaywalker:
         angle_obs = np.arctan((obs['pos'][1] - self.car.position[1]) / (obs['pos'][0] - self.car.position[0] + self.noise))
         lane_idx = min(range(len(self.lanes_y)), key=lambda i: abs(self.car.position[1] - self.lanes_y[i]))
 
-        inv_distance_obs, angle_obs = self.vision_obstacle()
+        inv_distance_obs, angle_obs = 0.0, -np.pi
 
         return array([
             self.car.position[1],
@@ -759,7 +766,7 @@ class QAgent():
     def greedy_arglexmax(self, Q):
         permissible_actions = self.permissible_actions
 
-        mask = (Q[:, 0] >= -0.7)
+        mask = (Q[:, 0] >= -0.7) # sceglie solo le azioni con Q[0] >= -0.7, cioè quelle con reward collisione accettabile
 
         if not torch.any(mask):
             permissible_actions = self.refine_actions(permissible_actions, Q[:,0])
@@ -773,7 +780,7 @@ class QAgent():
 
 
     def select_action(self, state):
-        if random.random() <= self.epsilon:
+        if random.random() <= self.epsilon: #<= ?????????????????????????? 
             return self.env.random_action()
         
         with torch.no_grad():
@@ -851,7 +858,7 @@ class QAgent():
         actions = torch.vstack((self.actions, self.actions, self.actions)).T.unsqueeze(1)
         # evaluate a' according wih target network
         return self.target_model(states).gather(1,actions).squeeze()
-    
+
     
     def experience_replay(self):
         if len(self.memory) < self.train_start:
@@ -884,6 +891,10 @@ class QAgent():
 
     def learn(self):
         bar = qqdm(np.arange(self.episodes), desc="Learning")
+
+        best_completed = 0.0 # Track the best completition score
+        consecutive_successes = 0 # counter for consecutive completed episodes
+
         for e in bar:
         
             state = self.env.reset()
@@ -897,19 +908,12 @@ class QAgent():
                 action = self.act(state.unsqueeze(0))
                 next_state, reward, terminated, truncated, completed = self.env.step(action)
 
-                #MODIFICHE PER VEDERE GLI OSTACOLI
-                #if step % 10 == 0:  
                 self.env.render()
-
-                done = terminated or truncated
-                
+                done = terminated or truncated          
                 next_state = torch.tensor(next_state).to(device)
-
                 episode_score += reward
                 reward = torch.tensor(reward)
-                
                 self.add_experience(state, action, reward, next_state, terminated)
-                
                 state = next_state
                 
                 if (step & self.replay_frequency) == 0:
@@ -926,13 +930,55 @@ class QAgent():
                     self.completed.append(completed)
                     self.num_actions.append(step)
 
-            if e >= 31:
-                rew_mean = sum(self.score[-31:])/31
-                compl_mean = np.mean(self.completed[-31:])
-                act_mean = np.mean(self.num_actions[-31:])
-                bar.set_infos({'Speed_': f'{(time.time() - bar.start_time) / (bar.n+1):.2f}s/it',
-                                 'Collision': f'{rew_mean[0]:.2f}', 'Forward': f'{rew_mean[1]:.2f}', 'OOB': f'{rew_mean[2]:.2f}',
-                                        'Completed': f'{compl_mean:.2f}', "Actions": f'{act_mean:.2f}'})
+                # Update best completion score and check conditions
+                if completed:
+                    # Calculate moving averages over last 31 episodes (or all available if fewer)
+                    window_size = min(31, len(self.completed))
+                    
+                    # Collision score (index 0 in self.score)
+                    current_collisions = np.mean([s[0] for s in self.score[-window_size:]]) if self.score else 0
+                    
+                    # Completion rate
+                    current_completed = np.mean(self.completed[-window_size:]) if self.completed else 0
+                    
+                    # Update best completion score
+                    if current_completed > best_completed:
+                        best_completed = current_completed
+                        print(f"New best completion score: {best_completed:.2f} at episode {e}")
+                    
+                    # Check for model saving condition
+                    if current_collisions == 0 and current_completed > 0.96:
+                        save_path = f"best_model_episode_{e}.pt"
+                        torch.save(self.model.state_dict(), save_path)
+                        print(f"Model saved at episode {e}: Collision=0, Completed={current_completed:.2f}")
+                    
+                    # Update consecutive successes counter
+                    if current_completed > 0.93:
+                        consecutive_successes += 1
+                    else:
+                        if consecutive_successes > 0:
+                            print(f"{consecutive_successes} consecutive successes reset at episode {e}.")
+                            consecutive_successes = 0
+                    
+                    # Early stopping condition
+                    if consecutive_successes >= 100:
+                        print(f"Early stopping achieved at episode {e} with {consecutive_successes} consecutive successes.")
+                        break
+                if e >= 31:
+                    rew_mean = sum(self.score[-31:]) / 31
+                    compl_mean = np.mean(self.completed[-31:])
+                    act_mean = np.mean(self.num_actions[-31:])
+                    current_eps = self.epsilon_record[-1] if self.epsilon_record else self.epsilon
+
+                    bar.set_infos({
+                            'Speed_': f'{(time.time() - bar.start_time) / (bar.n + 1):.2f}s/it',
+                            'Collision': f'{rew_mean[0]:.2f}',
+                            'Forward': f'{rew_mean[1]:.2f}',
+                            'OOB': f'{rew_mean[2]:.2f}',
+                            'Completed': f'{compl_mean:.2f}',
+                            'Actions': f'{act_mean:.2f}',
+                            'Epsilon': f'{current_eps:.4f}'
+                        })
                     
         #self.env.close()
 
@@ -954,11 +1000,11 @@ class QAgent():
         time = len(vs.oob)
         start = math.floor(N/2)
         end = time-start
-        self.plot_score(vs.collision, start, end, N, title + " collision", filename + str(self.env) + "_collision")
-        self.plot_score(vs.oob, start, end, N, title + " oob", filename + str(self.env) + "_oob")
-        self.plot_score(vs.distance, start, end, N, title + " distance", filename + str(self.env) + "_distance")
-        self.plot_score(self.completed, start, end, N, title + " completed", filename + str(self.env) + "_completed")
-        self.plot_score(self.num_actions, start, end, N, title + " actions", filename + str(self.env) + "_actions")
+        self.plot_score(vs.collision, start, end, N, title + " collision", filename + str(self.env) + "_collision_graph")
+        self.plot_score(vs.oob, start, end, N, title + " oob", filename + str(self.env) + "_oob_graph")
+        self.plot_score(vs.distance, start, end, N, title + " distance", filename + str(self.env) + "_distance_graph")
+        self.plot_score(self.completed, start, end, N, title + " completed", filename + str(self.env) + "_completed_graph")
+        self.plot_score(self.num_actions, start, end, N, title + " actions", filename + str(self.env) + "_actions_graph")
         
 
     def plot_epsilon(self, filename = ""):
@@ -1040,7 +1086,7 @@ class QAgent():
         
         plt.plot(jaywalker_position_x, jaywalker_position_y);
 
-        plt.savefig(path + str(self.env) + "_simulation_" + str(number));
+        plt.savefig(path + str(self.env) + "_simulation_" + str(number) + "_render.png");
         plt.clf();
 
 
@@ -1058,13 +1104,13 @@ def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_st
     for i in np.arange(num_simulations):
         agent.simulate(i, simulations_filename + str(agent.model) + "_" + version)
     
-    agent.save_model("agents/alternated_scenarios")
+    agent.save_model(str(agent.model) + "_" + version)
 
 
 if __name__ == "__main__":
     
     env = Jaywalker()
-    episodes = 3000
+    episodes = 10000
     replay_frequency = 3
     gamma = 0.95
     learning_rate = 1e-2 #5e-4
@@ -1085,6 +1131,9 @@ if __name__ == "__main__":
     simulations = 0
 
     network_type = sys.argv[1]
+
+     # print used device
+    print(f"Device: {device}")
 
     #p = Pool(32)
     if network_type == "lex":

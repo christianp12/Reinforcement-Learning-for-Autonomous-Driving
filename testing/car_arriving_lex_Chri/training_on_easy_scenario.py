@@ -322,6 +322,8 @@ class Jaywalker:
         if self.car.front[1] > self.dim_y or self.car.front[1] < 0 or self.car.back[1] > self.dim_y or self.car.back[1] < 0 or self.car.position[0] < 0 or self.car.front[0] < 0:
             reward[2] -= 1000
             terminated = True
+        else:  
+            reward[2] = -np.abs(self.car.position[1] - self.goal[1])
 
         reward[2] /= self.scale_factor * 10
 
@@ -851,7 +853,7 @@ class QAgent():
         actions = torch.vstack((self.actions, self.actions, self.actions)).T.unsqueeze(1)
         # evaluate a' according wih target network
         return self.target_model(states).gather(1,actions).squeeze()
-    
+
     
     def experience_replay(self):
         if len(self.memory) < self.train_start:
@@ -957,14 +959,21 @@ class QAgent():
                     if consecutive_successes >= 100:
                         print(f"Early stopping achieved at episode {e} with {consecutive_successes} consecutive successes.")
                         break
+                if e >= 31:
+                    rew_mean = sum(self.score[-31:]) / 31
+                    compl_mean = np.mean(self.completed[-31:])
+                    act_mean = np.mean(self.num_actions[-31:])
+                    current_eps = self.epsilon_record[-1] if self.epsilon_record else self.epsilon
 
-            if e >= 31:
-                rew_mean = sum(self.score[-31:])/31
-                compl_mean = np.mean(self.completed[-31:])
-                act_mean = np.mean(self.num_actions[-31:])
-                bar.set_infos({'Speed_': f'{(time.time() - bar.start_time) / (bar.n+1):.2f}s/it',
-                                 'Collision': f'{rew_mean[0]:.2f}', 'Forward': f'{rew_mean[1]:.2f}', 'OOB': f'{rew_mean[2]:.2f}',
-                                        'Completed': f'{compl_mean:.2f}', "Actions": f'{act_mean:.2f}'})
+                    bar.set_infos({
+                            'Speed_': f'{(time.time() - bar.start_time) / (bar.n + 1):.2f}s/it',
+                            'Collision': f'{rew_mean[0]:.2f}',
+                            'Forward': f'{rew_mean[1]:.2f}',
+                            'OOB': f'{rew_mean[2]:.2f}',
+                            'Completed': f'{compl_mean:.2f}',
+                            'Actions': f'{act_mean:.2f}',
+                            'Epsilon': f'{current_eps:.4f}'
+                        })
                     
         #self.env.close()
 
@@ -1102,7 +1111,7 @@ if __name__ == "__main__":
     learning_rate = 1e-2 #5e-4
     epsilon_start = 1
     epsilon_decay = 0.997 #0.995
-    epsilon_min = 0.01
+    epsilon_min = 0.00 #0.01
     batch_size = 256
     train_start = 1000
     target_model_update_rate = 1e-3

@@ -143,7 +143,7 @@ class Jaywalker:
         # self.brake_max   = -5.0   # accelerazione di frenata massima
 
         if not hasattr(self, 'car_img'):
-            self.car_img = mpimg.imread("car/carontop.png")  # ← metti il file nella stessa cartella
+            self.car_img = mpimg.imread("../car/carontop.png")  # ← metti il file nella stessa cartella
 
 
 
@@ -354,13 +354,17 @@ class Jaywalker:
 
     def reset(self):
 
-        self.obstacles = []
-
-        # ==== GRAFICA VELOCITÀ-TEMPO ====
+         # ==== GRAFICA VELOCITÀ-TEMPO ====
         # azzero la storia della velocità e del tempo
         self.velocity_history = []
         self.time_steps = []
         # ===============================
+
+        self.obstacles = []
+
+        #azzero la velocità passata della macchina ad ogni step
+        self.velocity_history = []
+        self.time_steps = []
 
     # Alternanza scenari
         self.last_scenario = getattr(self, 'last_scenario', 1)
@@ -380,12 +384,12 @@ class Jaywalker:
     # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
         if current_scenario == 1:
             pos_x = self.dim_x  # molto lontano dal pedone
-            speed = 0.1         # lento
+            speed = 0.5         # lento
 
     # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
         else:
             pos_x = self.jaywalker[0] + 5  # vicino al pedone
-            speed = 0.5                    # veloce
+            speed = 3                    # veloce
 
     # Auto ostacolante nella corsia di sorpasso
         lane = self.lanes_y[1]
@@ -1147,7 +1151,7 @@ if __name__ == "__main__":
                    replay_frequency, target_model_update_rate, memory_length, mini_batches, weights)
     
     agent.test_model(
-        model_path="Lex_jaywalker_QAgent.pt",
+        model_path="agents/alternated_scenarios.pt",
         num_episodes=2,
         render=True
     )
