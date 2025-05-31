@@ -184,7 +184,7 @@ class Jaywalker:
 
         self.noise = 1e-5
         self.sight = 40
-        self.sight_obstacle = 80
+        self.sight_obstacle = 70
 
         self.scale_factor = 100
 
@@ -242,12 +242,12 @@ class Jaywalker:
         distance = np.linalg.norm(vector_to_jaywalker)
 
         if self.car.position[0] >= self.jaywalker[0] or distance > self.sight:
-            return 0, -np.pi, float('inf')
+            return 0, -np.pi
 
         angle = np.arctan2(vector_to_jaywalker[1], vector_to_jaywalker[0])
         inv_distance = 1 / distance
 
-        return inv_distance, angle, distance
+        return inv_distance, angle
 
 
     def vision_obstacle(self):
@@ -322,28 +322,16 @@ class Jaywalker:
         if self.car.front[1] > self.dim_y or self.car.front[1] < 0 or self.car.back[1] > self.dim_y or self.car.back[1] < 0 or self.car.position[0] < 0 or self.car.front[0] < 0:
             reward[2] -= 1000
             terminated = True
-        else:  
-            reward[2] = -np.abs(self.car.position[1] - self.goal[1])
 
         reward[2] /= self.scale_factor * 10
 
 
-        inv_distance, angle, jaywalker_distance = self.vision()
-
-        # Find closest object
-        obs_distance = float('inf')
-        if self.obstacles:
-            obs_distances = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
-            obs_distance = min(obs_distances)
-        
-        # Call  vision_obstacle if jaywalker is detected or closest obstacle is closer than jaywalker
-        if jaywalker_distance < float('inf') or obs_distance < jaywalker_distance:
-            inv_distance_obs, angle_obs = self.vision_obstacle()
-        else:
-            inv_distance_obs, angle_obs = 0, -np.pi
+        inv_distance, angle = self.vision()
+        inv_distance_obs, angle_obs = self.vision_obstacle()
 
 
         
+        # trova ostacolo più vicino
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
         obs = self.obstacles[i_min]
@@ -381,9 +369,9 @@ class Jaywalker:
         self.obstacles = []
 
         # Alternanza scenari
-        #self.last_scenario = getattr(self, 'last_scenario', 1)
-        #current_scenario = 2 if self.last_scenario == 1 else 1
-        #self.last_scenario = current_scenario
+        self.last_scenario = getattr(self, 'last_scenario', 1)
+        current_scenario = 2 if self.last_scenario == 1 else 1
+        self.last_scenario = current_scenario
 
         self.car.reset(array([0.0, 2.5]))
         self.counter_iterations = 0
@@ -396,16 +384,14 @@ class Jaywalker:
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
         # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
-        #if current_scenario == 1:
-        pos_x = self.dim_x  # molto lontano dal pedone
-        speed = 0.5         # lento
-        self.sight_obstacle = 80
+        if current_scenario == 1:
+            pos_x = self.dim_x  # molto lontano dal pedone
+            speed = 0.5         # lento
 
         # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
-        #else:
-        #    pos_x = self.jaywalker[0] + 5  # vicino al pedone
-        #    speed = 0.5                    # veloce
-        #    self.sight_obstacle = 70
+        else:
+            pos_x = self.jaywalker[0] + 5  # vicino al pedone
+            speed = 3                    # veloce
 
         # Auto ostacolante nella corsia di sorpasso
         lane = self.lanes_y[1]
@@ -417,7 +403,7 @@ class Jaywalker:
         })
 
         # Stato iniziale
-        inv_distance, angle, jaywalker_distance = self.vision()
+        inv_distance, angle = self.vision()
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
         obs = self.obstacles[i_min]
@@ -425,19 +411,7 @@ class Jaywalker:
         angle_obs = np.arctan((obs['pos'][1] - self.car.position[1]) / (obs['pos'][0] - self.car.position[0] + self.noise))
         lane_idx = min(range(len(self.lanes_y)), key=lambda i: abs(self.car.position[1] - self.lanes_y[i]))
 
-
-        # Find closest object
-        obs_distance = float('inf')
-        if self.obstacles:
-            obs_distances = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
-            obs_distance = min(obs_distances)
-        
-        # Call  vision_obstacle if jaywalker is detected or closest obstacle is closer than jaywalker
-        if jaywalker_distance < float('inf') or obs_distance < jaywalker_distance:
-            inv_distance_obs, angle_obs = self.vision_obstacle()
-        else:
-            inv_distance_obs, angle_obs = 0, -np.pi
-        
+        inv_distance_obs, angle_obs = self.vision_obstacle()
 
         return array([
             self.car.position[1],
@@ -875,7 +849,7 @@ class QAgent():
         actions = torch.vstack((self.actions, self.actions, self.actions)).T.unsqueeze(1)
         # evaluate a' according wih target network
         return self.target_model(states).gather(1,actions).squeeze()
-
+    
     
     def experience_replay(self):
         if len(self.memory) < self.train_start:
@@ -995,21 +969,14 @@ class QAgent():
                     if consecutive_successes >= 100:
                         print(f"Early stopping achieved at episode {e} with {consecutive_successes} consecutive successes.")
                         break
-                if e >= 31:
-                    rew_mean = sum(self.score[-31:]) / 31
-                    compl_mean = np.mean(self.completed[-31:])
-                    act_mean = np.mean(self.num_actions[-31:])
-                    current_eps = self.epsilon_record[-1] if self.epsilon_record else self.epsilon
 
-                    bar.set_infos({
-                            'Speed_': f'{(time.time() - bar.start_time) / (bar.n + 1):.2f}s/it',
-                            'Collision': f'{rew_mean[0]:.2f}',
-                            'Forward': f'{rew_mean[1]:.2f}',
-                            'OOB': f'{rew_mean[2]:.2f}',
-                            'Completed': f'{compl_mean:.2f}',
-                            'Actions': f'{act_mean:.2f}',
-                            'Epsilon': f'{current_eps:.4f}'
-                        })
+            if e >= 31:
+                rew_mean = sum(self.score[-31:])/31
+                compl_mean = np.mean(self.completed[-31:])
+                act_mean = np.mean(self.num_actions[-31:])
+                bar.set_infos({'Speed_': f'{(time.time() - bar.start_time) / (bar.n+1):.2f}s/it',
+                                 'Collision': f'{rew_mean[0]:.2f}', 'Forward': f'{rew_mean[1]:.2f}', 'OOB': f'{rew_mean[2]:.2f}',
+                                        'Completed': f'{compl_mean:.2f}', "Actions": f'{act_mean:.2f}'})
                     
         #self.env.close()
 
@@ -1147,7 +1114,7 @@ if __name__ == "__main__":
     learning_rate = 1e-2 #5e-4
     epsilon_start = 1
     epsilon_decay = 0.997 #0.995
-    epsilon_min = 0.00 #0.01
+    epsilon_min = 0.01
     batch_size = 256
     train_start = 1000
     target_model_update_rate = 1e-3

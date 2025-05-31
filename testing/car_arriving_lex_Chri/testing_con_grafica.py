@@ -184,7 +184,7 @@ class Jaywalker:
 
         self.noise = 1e-5
         self.sight = 40
-        self.sight_obstacle = 70
+        self.sight_obstacle = 90
 
         self.scale_factor = 100
 
@@ -242,12 +242,12 @@ class Jaywalker:
         distance = np.linalg.norm(vector_to_jaywalker)
 
         if self.car.position[0] >= self.jaywalker[0] or distance > self.sight:
-            return 0, -np.pi
+            return 0, -np.pi, float('inf')
 
         angle = np.arctan2(vector_to_jaywalker[1], vector_to_jaywalker[0])
         inv_distance = 1 / distance
 
-        return inv_distance, angle
+        return inv_distance, angle, distance
 
 
     def vision_obstacle(self):
@@ -321,14 +321,31 @@ class Jaywalker:
         # collision with borders
         if self.car.front[1] > self.dim_y or self.car.front[1] < 0 or self.car.back[1] > self.dim_y or self.car.back[1] < 0 or self.car.position[0] < 0 or self.car.front[0] < 0:
             reward[2] -= 1000
-            terminated = True
+            terminated = True 
+        # distance from center of own lane
+        else:
+            # computes a distance-based penalty to encourage the car to stay centered in its lane
+            reward[2] = -np.abs(self.car.position[1] - self.goal[1])
 
         reward[2] /= self.scale_factor * 10
 
-        inv_distance, angle = self.vision()
-        inv_distance_obs, angle_obs = self.vision_obstacle()
+
+        inv_distance, angle, jaywalker_distance = self.vision()
+
+        # Find closest object
+        obs_distance = float('inf')
+        if self.obstacles:
+            obs_distances = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
+            obs_distance = min(obs_distances)
         
-        # trova ostacolo più vicino
+        # Call  vision_obstacle if jaywalker is detected or closest obstacle is closer than jaywalker
+        if jaywalker_distance < float('inf') or obs_distance < jaywalker_distance:
+            inv_distance_obs, angle_obs = self.vision_obstacle()
+        else:
+            inv_distance_obs, angle_obs = 0, -np.pi
+
+
+        
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
         obs = self.obstacles[i_min]
@@ -363,22 +380,12 @@ class Jaywalker:
 
     def reset(self):
 
-        # ==== GRAFICA VELOCITÀ-TEMPO ====
-        # azzero la storia della velocità e del tempo
-        self.velocity_history = []
-        self.time_steps = []
-        # ===============================
-
         self.obstacles = []
 
-        #azzero la velocità passata della macchina ad ogni step
-        self.velocity_history = []
-        self.time_steps = []
-
         # Alternanza scenari
-        self.last_scenario = getattr(self, 'last_scenario', 1)
-        current_scenario = 2 if self.last_scenario == 1 else 1
-        self.last_scenario = current_scenario
+        #self.last_scenario = getattr(self, 'last_scenario', 1)
+        #current_scenario = 2 if self.last_scenario == 1 else 1
+        #self.last_scenario = current_scenario
 
         self.car.reset(array([0.0, 2.5]))
         self.counter_iterations = 0
@@ -391,16 +398,14 @@ class Jaywalker:
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
         # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
-        if current_scenario == 1:
-            pos_x = self.dim_x  # molto lontano dal pedone
-            speed = 0.5         # lento
-            self.sight_obstacle = 80
+        #if current_scenario == 1:
+        #pos_x = self.dim_x  # molto lontano dal pedone
+        #speed = 0.5         # lento
 
         # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
-        else:
-            pos_x = self.jaywalker[0] + 5  # vicino al pedone
-            speed = 4                    # veloce
-            self.sight_obstacle = 80
+        #else:
+        #    pos_x = self.jaywalker[0] + 5  # vicino al pedone
+        #   speed = 0.5                    # veloce
 
         # Auto ostacolante nella corsia di sorpasso
         lane = self.lanes_y[1]
@@ -423,7 +428,7 @@ class Jaywalker:
             'v': speed
         })
         # Stato iniziale
-        inv_distance, angle = self.vision()
+        inv_distance, angle, jaywalker_distance = self.vision()
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
         obs = self.obstacles[i_min]
@@ -431,7 +436,19 @@ class Jaywalker:
         angle_obs = np.arctan((obs['pos'][1] - self.car.position[1]) / (obs['pos'][0] - self.car.position[0] + self.noise))
         lane_idx = min(range(len(self.lanes_y)), key=lambda i: abs(self.car.position[1] - self.lanes_y[i]))
 
-        inv_distance_obs, angle_obs = self.vision_obstacle()
+
+        # Find closest object
+        obs_distance = float('inf')
+        if self.obstacles:
+            obs_distances = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
+            obs_distance = min(obs_distances)
+        
+        # Call  vision_obstacle if jaywalker is detected or closest obstacle is closer than jaywalker
+        if jaywalker_distance < float('inf') or obs_distance < jaywalker_distance:
+            inv_distance_obs, angle_obs = self.vision_obstacle()
+        else:
+            inv_distance_obs, angle_obs = 0, -np.pi
+        
 
         return array([
             self.car.position[1],
@@ -453,57 +470,46 @@ class Jaywalker:
     def __str__(self):
         return "jaywalker"
     
+    #MODIFICHE PER VEDERE GLI OSTACOLI
     def render(self):
-
-        # ===== GRAFICO VELOCITÀ-TEMPO =====
-
-        if not hasattr(self, "velocity_history"):
-            self.velocity_history = []
-            self.time_steps = []
-
-        # =======================================
-
-        # creo la velocità della macchina passata
-        self.velocity_history.append(self.car.v)
-        self.time_steps.append(len(self.time_steps))
-
         plt.clf()
-        fig = plt.gcf()
-        fig.set_size_inches(10, 6)  # Allarga la finestra
-        ax1 = plt.subplot2grid((2, 1), (0, 0))  # Strada
-        ax2 = plt.subplot2grid((2, 1), (1, 0))  # Grafico velocità-tempo
-
-        # === GRAFICA STRADA (ax1) ===
+        ax = plt.gca()
         road = mpatches.Rectangle((0, 0), self.dim_x, self.dim_y,
-                              facecolor='black', edgecolor='none')
-        ax1.add_patch(road)
+                                  facecolor='black', edgecolor='none')
+        ax.add_patch(road)
 
         gx = self.goal[0]
-        ax1.plot([gx, gx], [0, self.dim_y],
-             color='lime', linewidth=2,
-             linestyle=(0, (5, 5)),
-             label='Finish')
+        ax.plot([gx, gx], [0, self.dim_y],
+            color='lime', linewidth=2,
+            linestyle=(0, (5, 5)),
+            label='Finish')
 
-        ax1.plot([0, self.dim_x], [0, 0], color='white', linewidth=2)
-        ax1.plot([0, self.dim_x], [self.dim_y, self.dim_y], color='white', linewidth=2)
+        # 2) linee di bordo continue – bianche
+        plt.plot([0, self.dim_x], [0, 0], color='white', linewidth=2)
+        plt.plot([0, self.dim_x], [self.dim_y, self.dim_y], color='white', linewidth=2)
+
+        # 3) linea centrale tratteggiata – bianca
         mid_y = self.dim_y / 2
-        ax1.plot([0, self.dim_x], [mid_y, mid_y],
-             color='white', linewidth=1,
-             linestyle=(0, (10, 10)))
+        plt.plot([0, self.dim_x], [mid_y, mid_y],
+                 color='white', linewidth=1,
+                 linestyle=(0, (10, 10))) 
 
+        #PEDONE COME CERCHIO ROSSO
         circle_j = plt.Circle(self.jaywalker, self.jaywalker_r, color='red', alpha=0.5)
-        ax1.add_patch(circle_j)
+        plt.gca().add_patch(circle_j)
 
+       #GLI OSTACOLI POSSONO ESSERE MACCHINE (ARANCIONI)
         for obs in getattr(self, 'obstacles', []):
-            c = 'orange' if obs['type'] == 'car' else 'green'
+            c = 'orange' if obs['type']=='car' else 'green'
             circle_o = plt.Circle(obs['pos'], obs['r'], color=c, alpha=0.5)
-            ax1.add_patch(circle_o)
+            plt.gca().add_patch(circle_o)
 
         car = self.car
         car_length = 4.0
         car_width = 4.0
         arg = car.phi + car.beta
 
+# Coordinate per posizionare l'immagine
         extent = [
             car.position[0] - car_length / 2,
             car.position[0] + car_length / 2,
@@ -511,26 +517,23 @@ class Jaywalker:
             car.position[1] + car_width / 2
         ]
 
+# Trasformazione per ruotare l'immagine
         img_transform = transforms.Affine2D().rotate_around(
             car.position[0], car.position[1], arg
-        ) + ax1.transData
+        ) + plt.gca().transData
 
-        ax1.imshow(self.car_img, extent=extent, transform=img_transform, zorder=5)
+# Mostra immagine dell’auto
+        plt.imshow(self.car_img, extent=extent, transform=img_transform, zorder=5)
 
-        ax1.set_xlim(-1, self.dim_x + 1)
-        ax1.set_ylim(-1, self.dim_y + 1)
-        ax1.set_title("Autonomous Car Environment")
 
-        # === GRAFICO VELOCITÀ-TEMPO (ax2) ===
-        ax2.plot(self.time_steps, self.velocity_history, color='cyan', linewidth=2)
-        ax2.set_xlim(left=max(0, len(self.time_steps)-100), right=len(self.time_steps))
-        ax2.set_ylim(0, max(1, max(self.velocity_history) * 1.1))
-        ax2.set_title("Velocity over Time")
-        ax2.set_xlabel("Time Step")
-        ax2.set_ylabel("Velocity")
-    # ====================================
 
-        plt.tight_layout()
+        blue_patch = mpatches.Patch(color='blue', label='Your Car')
+        red_patch = mpatches.Patch(color='red', label='Jaywalker')
+        orange_patch = mpatches.Patch(color='orange', label='Obstacle Car')
+        #plt.legend(handles=[blue_patch, red_patch, orange_patch])
+        
+        plt.xlim(-1, self.dim_x+1)
+        plt.ylim(-1, self.dim_y+1)
         plt.pause(0.001)
 
 
@@ -1211,6 +1214,7 @@ if __name__ == "__main__":
     agent = QAgent(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
                    replay_frequency, target_model_update_rate, memory_length, mini_batches, weights)
     
+
     agent.test_model(
         model_path="best_model_episode_2895.pt",
         num_episodes=6,
