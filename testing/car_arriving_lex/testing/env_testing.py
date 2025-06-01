@@ -137,6 +137,8 @@ class Jaywalker:
         self.jaywalker_speed = 0.0 
         self.jaywalker_dir = 1 
 
+        self.env_type = 1 #default enviroment, easy scenario -> car far away and still jaywalker
+
         #modifiche per curriculum
         self.curriculum_stage = 1
 
@@ -293,17 +295,17 @@ class Jaywalker:
     def step(self, action):
 
         # # MODIFICHE PER MOVIMENTO JAYWALKER
-        # self.jaywalker[1] += self.jaywalker_speed * self.jaywalker_dir
-        # # -- se il pedone esce dalla corsia sbuca da sotto  
-        # if self.jaywalker[1] < 0 or self.jaywalker[1] > self.dim_y:
-        #     # riparti daccapo: nuova X e inverti direzione
-        #     self.jaywalker[0] = random.uniform(self.dim_x/2, self.dim_x)
-        #     self.jaywalker_dir *= -1
-        #     # correggi Y all’interno
-        #     self.jaywalker[1] = np.clip(self.jaywalker[1], 0, self.dim_y)
-        # # aggiorna bounding box del pedone
-        # self.jaywalker_max = self.jaywalker + self.jaywalker_r
-        # self.jaywalker_min = self.jaywalker - self.jaywalker_r
+        self.jaywalker[1] += self.jaywalker_speed * self.jaywalker_dir
+        # -- se il pedone esce dalla corsia sbuca da sotto  
+        if self.jaywalker[1] < 0 or self.jaywalker[1] > self.dim_y:
+            # riparti daccapo: nuova X e inverti direzione
+            self.jaywalker[0] = random.uniform(self.dim_x/2, self.dim_x)
+            self.jaywalker_dir *= -1
+            # correggi Y all’interno
+            self.jaywalker[1] = np.clip(self.jaywalker[1], 0, self.dim_y)
+        # aggiorna bounding box del pedone
+        self.jaywalker_max = self.jaywalker + self.jaywalker_r
+        self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
         df, a = self.actions[action]
         self.car.move(df, a) 
@@ -381,31 +383,42 @@ class Jaywalker:
 
         self.obstacles = []
 
-        # Alternanza scenari
-        self.last_scenario = getattr(self, 'last_scenario', 1)
-        current_scenario = 2 if self.last_scenario == 1 else 1
-        self.last_scenario = current_scenario
 
         self.car.reset(array([0.0, 2.5]))
         self.counter_iterations = 0
 
         # --- Pedone fermo a metà strada, posizione fissa ---
         self.jaywalker = array([self.dim_x * 0.5, self.dim_y / 4])
-        self.jaywalker_speed = 0.0
-        self.jaywalker_dir = 0
         self.jaywalker_max = self.jaywalker + self.jaywalker_r
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
         # # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
-        if current_scenario == 1:
+        if self.env_type == 1:
             pos_x = self.dim_x + 100  # molto lontano dal pedone
             speed = 0.0         # lento
+            self.jaywalker_speed = 0.0
+            self.jaywalker_dir = 0
 
         # # # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
-        else:
+        elif self.env_type == 2:
             pos_x = self.jaywalker[0] + 5  # vicino al pedone
-            speed = 0.5                   
+            speed = 1     
+            self.jaywalker_speed = 0.0
+            self.jaywalker_dir = 0              
 
+        # # # --- Scenario 3: jaywalker in movimento, macchina distante ---
+        elif self.env_type == 3:
+            pos_x = self.dim_x + 100  # molto lontano dal pedone
+            speed = 0.5         # lento
+            self.jaywalker_speed = 1.0
+            self.jaywalker_dir = random.choice([-1, 1])  # direzione casuale
+        
+        # # # --- Scenario 4: jaywalker in movimento, macchina vicina ---
+        elif self.env_type == 4:
+            pos_x = self.jaywalker[0] + 5
+            speed = 1            
+            self.jaywalker_speed = 1.0
+            self.jaywalker_dir = random.choice([-1, 1])  # direzione casuale
 
    
         # Auto ostacolante nella corsia di sorpasso
@@ -700,7 +713,7 @@ class QAgent():
 
     def __init__(self, network, env, learning_rate, batch_size, hidden, slack, \
                  epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, \
-                 train_start, replay_frequency, target_model_update_rate, memory_length, mini_batches, weights):
+                 train_start, replay_frequency, target_model_update_rate, memory_length, mini_batches, weights, env_type):
 
         self.env = env
 
@@ -709,6 +722,9 @@ class QAgent():
         self.action_size = env.action_size
         self.reward_size = env.reward_size
         self.slack = slack
+
+        #modifiche per env testing
+        self.env.env_type = env_type
 
         self.permissible_actions = torch.tensor(range(self.action_size)).to(device)
 
@@ -1191,33 +1207,29 @@ if __name__ == "__main__":
     img_filename = "imgs/"
     simulations_filename = "imgs/simulations/"
     simulations = 0
+    network = Lex_Q_Network
+    weights = None
 
-    network_type = sys.argv[1]
+
+    env_type = sys.argv[1]
 
     #p = Pool(32)
-    if network_type == "lex":
-        network = Lex_Q_Network
-        weights = None
+    if env_type == "1": #easy enviroment: jaywalker still and car far away 
+        env_type = 1
 
-    elif network_type == "weighted":
-        network = Weighted_Q_Network
-        weights = torch.tensor([1.0, 0.1, 0.01])
+    elif env_type == "2": #hard enviroment: jaywalker still and car close
+        env_type = 2
 
-        simulations = int(sys.argv[2])
+    elif env_type == "3": #very hard enviroment: jaywalker moving and car far away
+        env_type = 3
 
-        if simulations > 1:
-            weights_list = [weights ** i for i in np.arange(1, simulations+1)]
-            img_filename = "weighted_simulations/" + img_filename
-            simulations_filename = "weighted_simulations/simulations/"
-
-    elif network_type == "sclar":
-        network = Scalar_Q_Network
-
+    elif env_type == "4": #very very hard enviroment: jaywalker moving and car close 
+        env_type = 4
     else:
-        raise ValueError("Network type" + network_type + "unknown")
+        raise ValueError("enviroment type " + env_type + " unknown:\n" + "1 -> jaywalker still and car far away \n2 -> jaywalker still and car close\n3 -> jaywalker moving and car far away\n4 -> jaywalker moving and car close")
     
     agent = QAgent(network, env, learning_rate, batch_size, hidden, slack, epsilon_start, epsilon_decay, epsilon_min, episodes, gamma, train_start,
-                   replay_frequency, target_model_update_rate, memory_length, mini_batches, weights)
+                   replay_frequency, target_model_update_rate, memory_length, mini_batches, weights, env_type)
     
     agent.test_model(
         model_path="../agents/alternated_2.pt",
