@@ -74,8 +74,8 @@ def array(*args, **kwargs):
 class Car:
     def __init__(self, position):
         # distanze dal centro delle route anteriori e posteriori
-        self.lf = 1
-        self.lr = 1
+        self.lf = 0.5 #1
+        self.lr = 0.5 #1
 
         self.max_speed = 20.0
         #self.prev_position = np.zeros(2)
@@ -136,6 +136,12 @@ class Jaywalker:
         self.max_j_speed = 0.5
         self.jaywalker_speed = 0.0 
         self.jaywalker_dir = 1 
+
+        #modifiche per curriculum
+        self.curriculum_stage = 1
+
+        #modifiche per rallebntamento avversario
+        self.completed_mean = 0.0
         
 
         if not hasattr(self, 'car_img'):
@@ -164,7 +170,7 @@ class Jaywalker:
 
         #self.df = [-np.pi/9, -np.pi/18, 0, np.pi/18, np.pi/9]
         self.df = [-np.pi/18, 0, np.pi/18]
-        self.a = [-5, 0, 5]
+        self.a = [-7, 0, 2]
         self.actions = [p for p in itertools.product(self.df, self.a)]
 
         self.num_df_actions = len(self.df)
@@ -173,7 +179,7 @@ class Jaywalker:
         self.state_size = 8
         self.action_size = self.num_df_actions * self.num_a_actions
 
-        self.max_iterations = 100
+        self.max_iterations = 15000 # 100
 
         self.car = Car(array([0.0,2.5]))
 
@@ -183,8 +189,8 @@ class Jaywalker:
         self.prev_target_distance = np.linalg.norm(self.car.front - self.goal)
 
         self.noise = 1e-5
-        self.sight = 30
-        self.sight_obstacle = 70
+        self.sight = 60
+        self.sight_obstacle = 80
 
         self.scale_factor = 100
 
@@ -330,7 +336,7 @@ class Jaywalker:
 
         # collision with borders
         if self.car.front[1] > self.dim_y or self.car.front[1] < 0 or self.car.back[1] > self.dim_y or self.car.back[1] < 0 or self.car.position[0] < 0 or self.car.front[0] < 0:
-            reward[2] -= 1000 # 1000
+            reward[2] -= 1000 # 100
             terminated = True
         else:  
             reward[2] = -np.abs(self.car.position[1] - self.goal[1])
@@ -376,9 +382,9 @@ class Jaywalker:
         self.obstacles = []
 
         # Alternanza scenari
-        # self.last_scenario = getattr(self, 'last_scenario', 1)
-        # current_scenario = 2 if self.last_scenario == 1 else 1
-        # self.last_scenario = current_scenario
+        self.last_scenario = getattr(self, 'last_scenario', 1)
+        current_scenario = 2 if self.last_scenario == 1 else 1
+        self.last_scenario = current_scenario
 
         self.car.reset(array([0.0, 2.5]))
         self.counter_iterations = 0
@@ -391,17 +397,39 @@ class Jaywalker:
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
         # # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
-        # if current_scenario == 1:
-        #     pos_x = self.dim_x  # molto lontano dal pedone
-        #     speed = 0.5         # lento
+        # if current_scenario == 1 and epsilon:
+        #     pos_x = self.dim_x + 100  # molto lontano dal pedone
+        #     speed = 0.0         # lento
         #     self.sight_obstacle = 70
 
-        # # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
+        # # # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
         # else:
-        pos_x = self.jaywalker[0] + 5  # vicino al pedone
-        speed = 1                    # veloce
-        self.sight_obstacle = 70
+        #     pos_x = self.jaywalker[0] + 5  # vicino al pedone
+        #     speed = 0.5                   
+        #     self.sight_obstacle = 70
 
+        # Alternanza scenari in fase 1
+        if self.curriculum_stage == 1:
+            scenario = random.choice(["easy", "critical"])
+        else:
+            scenario = "critical"
+
+        
+
+        # Configura posizione ostacolo
+        if scenario == "easy":
+            pos_x = self.dim_x + 100  # lontano dal pedone
+            speed = 0.0
+
+        if scenario == "critical":
+            base_speed = 2.0
+            if self.curriculum_stage == 2:  # fase dopo epsilon=0.01
+                speed = base_speed - self.completed_mean
+            else:
+                speed = base_speed
+
+
+   
         # Auto ostacolante nella corsia di sorpasso
         lane = self.lanes_y[1]
         self.obstacles.append({
@@ -467,18 +495,22 @@ class Jaywalker:
                  linestyle=(0, (10, 10))) 
 
         #PEDONE COME CERCHIO ROSSO
-        circle_j = plt.Circle(self.jaywalker, self.jaywalker_r, color='red', alpha=0.5)
-        plt.gca().add_patch(circle_j)
+        half_side = self.jaywalker_r
+        bottom_left_corner = self.jaywalker - half_side
+        square_j = mpatches.Rectangle(bottom_left_corner, 2 * half_side, 2.5 * half_side, color='red', alpha=0.5)
+        plt.gca().add_patch(square_j)
 
        #GLI OSTACOLI POSSONO ESSERE MACCHINE (ARANCIONI)
         for obs in getattr(self, 'obstacles', []):
             c = 'orange' if obs['type']=='car' else 'green'
-            circle_o = plt.Circle(obs['pos'], obs['r'], color=c, alpha=0.5)
-            plt.gca().add_patch(circle_o)
+            half_side = obs['r']
+            bottom_left_corner = obs['pos'] - half_side
+            square_o = mpatches.Rectangle(bottom_left_corner, 2 * half_side, 2 * half_side, color=c, alpha=0.5)
+            plt.gca().add_patch(square_o)
 
         car = self.car
-        car_length = 4.0
-        car_width = 4.0
+        car_length = 3.0
+        car_width = 3.0
         arg = car.phi + car.beta
 
 # Coordinate per posizionare l'immagine
@@ -496,13 +528,6 @@ class Jaywalker:
 
 # Mostra immagine dell’auto
         plt.imshow(self.car_img, extent=extent, transform=img_transform, zorder=5)
-
-
-
-        blue_patch = mpatches.Patch(color='blue', label='Your Car')
-        red_patch = mpatches.Patch(color='red', label='Jaywalker')
-        orange_patch = mpatches.Patch(color='orange', label='Obstacle Car')
-        #plt.legend(handles=[blue_patch, red_patch, orange_patch])
         
         plt.xlim(-1, self.dim_x+1)
         plt.ylim(-1, self.dim_y+1)
@@ -718,6 +743,10 @@ class QAgent():
         self.target_model_update_rate = target_model_update_rate
         self.mini_batches = mini_batches
 
+        #modifiche per curriculum
+        self.curriculum_stage = 1
+
+
         self.score = []
         self.epsilon_record = []
         self.completed = []
@@ -925,6 +954,11 @@ class QAgent():
 
                 if done:                                
                     self.update_epsilon()
+                    # Passa alla fase 2 quando epsilon ≈ epsilon_min
+                    if self.epsilon <= 0.02 and self.curriculum_stage == 1: #0.01 HARDCODED
+                        self.curriculum_stage = 2
+                        self.env.curriculum_stage = 2
+
                     self.score.append(episode_score)
                     self.epsilon_record.append(self.epsilon)
                     self.completed.append(completed)
@@ -979,6 +1013,8 @@ class QAgent():
                             'Actions': f'{act_mean:.2f}',
                             'Epsilon': f'{current_eps:.4f}'
                         })
+                self.env.completed_mean = compl_mean
+
                     
         #self.env.close()
 
@@ -1120,7 +1156,7 @@ if __name__ == "__main__":
     batch_size = 256
     train_start = 1000
     target_model_update_rate = 1e-3
-    memory_length = 10000 #100000
+    memory_length = 1500000 #100000
     mini_batches = 4
     branch_size = 256
     slack = 0.1
