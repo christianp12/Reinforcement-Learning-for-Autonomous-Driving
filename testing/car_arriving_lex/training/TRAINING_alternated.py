@@ -423,6 +423,7 @@ class Jaywalker:
 
         if scenario == "critical":
             base_speed = 2.0
+            pos_x = self.jaywalker[0] + 20  # vicino al pedone
             if self.curriculum_stage == 2:  # fase dopo epsilon=0.01
                 speed = base_speed - self.completed_mean
             else:
@@ -1013,7 +1014,7 @@ class QAgent():
                             'Actions': f'{act_mean:.2f}',
                             'Epsilon': f'{current_eps:.4f}'
                         })
-                self.env.completed_mean = compl_mean
+                    self.env.completed_mean = compl_mean
 
                     
         #self.env.close()

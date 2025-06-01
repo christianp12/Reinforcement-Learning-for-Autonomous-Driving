@@ -184,7 +184,7 @@ class Jaywalker:
 
         self.noise = 1e-5
         self.sight = 40
-        self.sight_obstacle = 80
+        self.sight_obstacle = 70
 
         self.scale_factor = 100
 
@@ -242,12 +242,12 @@ class Jaywalker:
         distance = np.linalg.norm(vector_to_jaywalker)
 
         if self.car.position[0] >= self.jaywalker[0] or distance > self.sight:
-            return 0, -np.pi, float('inf')
+            return 0, -np.pi
 
         angle = np.arctan2(vector_to_jaywalker[1], vector_to_jaywalker[0])
         inv_distance = 1 / distance
 
-        return inv_distance, angle, distance
+        return inv_distance, angle
 
 
     def vision_obstacle(self):
@@ -328,22 +328,12 @@ class Jaywalker:
         reward[2] /= self.scale_factor * 10
 
 
-        inv_distance, angle, jaywalker_distance = self.vision()
-
-        # Find closest object
-        obs_distance = float('inf')
-        if self.obstacles:
-            obs_distances = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
-            obs_distance = min(obs_distances)
-        
-        # Call  vision_obstacle if jaywalker is detected or closest obstacle is closer than jaywalker
-        if jaywalker_distance < float('inf') or obs_distance < jaywalker_distance:
-            inv_distance_obs, angle_obs = self.vision_obstacle()
-        else:
-            inv_distance_obs, angle_obs = 0, -np.pi
+        inv_distance, angle = self.vision()
+        inv_distance_obs, angle_obs = self.vision_obstacle()
 
 
         
+        # trova ostacolo più vicino
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
         obs = self.obstacles[i_min]
@@ -417,7 +407,7 @@ class Jaywalker:
         })
 
         # Stato iniziale
-        inv_distance, angle, jaywalker_distance = self.vision()
+        inv_distance, angle = self.vision()
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
         obs = self.obstacles[i_min]
@@ -425,19 +415,7 @@ class Jaywalker:
         angle_obs = np.arctan((obs['pos'][1] - self.car.position[1]) / (obs['pos'][0] - self.car.position[0] + self.noise))
         lane_idx = min(range(len(self.lanes_y)), key=lambda i: abs(self.car.position[1] - self.lanes_y[i]))
 
-
-        # Find closest object
-        obs_distance = float('inf')
-        if self.obstacles:
-            obs_distances = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
-            obs_distance = min(obs_distances)
-        
-        # Call  vision_obstacle if jaywalker is detected or closest obstacle is closer than jaywalker
-        if jaywalker_distance < float('inf') or obs_distance < jaywalker_distance:
-            inv_distance_obs, angle_obs = self.vision_obstacle()
-        else:
-            inv_distance_obs, angle_obs = 0, -np.pi
-        
+        inv_distance_obs, angle_obs = self.vision_obstacle()
 
         return array([
             self.car.position[1],
@@ -905,17 +883,6 @@ class QAgent():
         
         self.model.eval()
 
-    
-    def adaptive_lr_decay(self, completion_rate, min_lr=5e-4, max_lr=1e-2):
-        # Inverse sigmoid shape: High lr at low performance, low lr at high performance
-        new_lr = min_lr + (max_lr - min_lr) * (1 - completion_rate)  # Linear decay
-        for param_group in self.model.optimizer.param_groups:
-            current_lr = param_group['lr']
-            if abs(current_lr - new_lr) > 1e-6:  # Only log when the change is significant
-                print(f"LR changed from {current_lr:.6f} to {new_lr:.6f}")
-                param_group['lr'] = new_lr
-
-
 
     def learn(self):
         bar = qqdm(np.arange(self.episodes), desc="Learning")
@@ -968,9 +935,6 @@ class QAgent():
                     
                     # Completion rate
                     current_completed = np.mean(self.completed[-window_size:]) if self.completed else 0
-
-                    self.adaptive_lr_decay(current_completed)
-
                     
                     # Update best completion score
                     if current_completed > best_completed:

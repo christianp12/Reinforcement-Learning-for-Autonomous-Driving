@@ -147,7 +147,7 @@ class Jaywalker:
         
 
         if not hasattr(self, 'car_img'):
-            self.car_img = mpimg.imread("../car/carontop.png")  # ← metti il file nella stessa cartella
+            self.car_img = mpimg.imread(".car/carontop.png")  # ← metti il file nella stessa cartella
 
 
         self.reward_size = 3
@@ -1232,7 +1232,7 @@ if __name__ == "__main__":
                    replay_frequency, target_model_update_rate, memory_length, mini_batches, weights, env_type)
     
     agent.test_model(
-        model_path="../agents/alternated_2.pt",
+        model_path="models/alternated_2.pt",
         num_episodes=4,
         render=True
     )
