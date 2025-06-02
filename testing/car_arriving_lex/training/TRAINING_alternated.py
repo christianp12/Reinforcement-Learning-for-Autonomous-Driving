@@ -376,37 +376,9 @@ class Jaywalker:
 
         return state, reward, terminated, truncated, completed
 
-
     def reset(self):
 
         self.obstacles = []
-
-        # Alternanza scenari
-        self.last_scenario = getattr(self, 'last_scenario', 1)
-        current_scenario = 2 if self.last_scenario == 1 else 1
-        self.last_scenario = current_scenario
-
-        self.car.reset(array([0.0, 2.5]))
-        self.counter_iterations = 0
-
-        # --- Pedone fermo a metà strada, posizione fissa ---
-        self.jaywalker = array([self.dim_x * 0.5, self.dim_y / 4])
-        self.jaywalker_speed = 0.0
-        self.jaywalker_dir = 0
-        self.jaywalker_max = self.jaywalker + self.jaywalker_r
-        self.jaywalker_min = self.jaywalker - self.jaywalker_r
-
-        # # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
-        # if current_scenario == 1 and epsilon:
-        #     pos_x = self.dim_x + 100  # molto lontano dal pedone
-        #     speed = 0.0         # lento
-        #     self.sight_obstacle = 70
-
-        # # # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
-        # else:
-        #     pos_x = self.jaywalker[0] + 5  # vicino al pedone
-        #     speed = 0.5                   
-        #     self.sight_obstacle = 70
 
         # Alternanza scenari in fase 1
         if self.curriculum_stage == 1:
@@ -414,31 +386,52 @@ class Jaywalker:
         else:
             scenario = "critical"
 
-        
+        self.car.reset(array([0.0, 2.5]))
+        self.counter_iterations = 0
 
-        # Configura posizione ostacolo
+        # Pedone fermo a metà strada
+        self.jaywalker = array([self.dim_x * 0.5, self.dim_y / 4])
+        self.jaywalker_speed = 0.0
+        self.jaywalker_dir = 0
+        self.jaywalker_max = self.jaywalker + self.jaywalker_r
+        self.jaywalker_min = self.jaywalker - self.jaywalker_r
+
+        # === Scenario "easy": ostacolo molto distante ===
         if scenario == "easy":
-            pos_x = self.dim_x + 100  # lontano dal pedone
+            pos_x = self.dim_x + 100
             speed = 0.0
+            self.obstacles.append({
+                'type': 'car',
+                'pos': array([pos_x, self.lanes_y[1]]),
+                'r': 2.0,
+                'v': speed
+            })
 
+        # === Scenario "critical": ostacolo vicino o doppio ===
         if scenario == "critical":
             base_speed = 2.0
-            pos_x = self.jaywalker[0] + 20  # vicino al pedone
-            if self.curriculum_stage == 2:  # fase dopo epsilon=0.01
-                speed = base_speed - self.completed_mean
+            speed = base_speed - self.completed_mean if self.curriculum_stage == 2 else base_speed
+
+            if self.curriculum_stage == 2:
+                # Due auto che si muovono da destra a sinistra (verso l'agente)
+                for _ in range(2):
+                    pos_x = random.uniform(self.jaywalker[0] + 15, self.dim_x)
+                    self.obstacles.append({
+                        'type': 'car',
+                        'pos': array([pos_x, self.lanes_y[1]]),
+                        'r': 2.0,
+                        'v': speed  # verso sinistra
+                    })
             else:
-                speed = base_speed
+                # Singolo ostacolo in posizione fissa
+                pos_x = self.jaywalker[0] + 20
+                self.obstacles.append({
+                    'type': 'car',
+                    'pos': array([pos_x, self.lanes_y[1]]),
+                    'r': 2.0,
+                    'v': speed
+                })
 
-
-   
-        # Auto ostacolante nella corsia di sorpasso
-        lane = self.lanes_y[1]
-        self.obstacles.append({
-            'type': 'car',
-            'pos': array([pos_x, lane]),
-            'r': 2.0,
-            'v': speed
-        })
 
         # Stato iniziale
         inv_distance, angle = self.vision()
