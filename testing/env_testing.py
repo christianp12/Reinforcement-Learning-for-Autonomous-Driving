@@ -1232,7 +1232,7 @@ if __name__ == "__main__":
                    replay_frequency, target_model_update_rate, memory_length, mini_batches, weights, env_type)
     
     agent.test_model(
-        model_path="agent_75_10k.pt",
+        model_path="models/alternated_2.pt",
         num_episodes=4,
         render=True
     )
