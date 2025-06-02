@@ -139,12 +139,12 @@ class Jaywalker:
         
 
         if not hasattr(self, 'car_img'):
-            self.car_img = mpimg.imread("car/carontop.png")  # ← metti il file nella stessa cartella
+            self.car_img = mpimg.imread("../.car/carontop.png")  # ← metti il file nella stessa cartella
 
 
         self.reward_size = 3
 
-        self.dim_x = 100
+        self.dim_x = 120
         self.dim_y = 10
 
         #modifiche per aggiunta dinamica di ostacoli
@@ -164,7 +164,7 @@ class Jaywalker:
 
         #self.df = [-np.pi/9, -np.pi/18, 0, np.pi/18, np.pi/9]
         self.df = [-np.pi/18, 0, np.pi/18]
-        self.a = [-2, 0, 2] #[-5, 0, 5]
+        self.a = [-5, 0, 5]
         self.actions = [p for p in itertools.product(self.df, self.a)]
 
         self.num_df_actions = len(self.df)
@@ -173,7 +173,7 @@ class Jaywalker:
         self.state_size = 8
         self.action_size = self.num_df_actions * self.num_a_actions
 
-        self.max_iterations = 100
+        self.max_iterations = 1000
 
         self.car = Car(array([0.0,2.5]))
 
@@ -183,7 +183,7 @@ class Jaywalker:
         self.prev_target_distance = np.linalg.norm(self.car.front - self.goal)
 
         self.noise = 1e-5
-        self.sight = 40
+        self.sight = 60
         self.sight_obstacle = 80
 
         self.scale_factor = 100
@@ -391,7 +391,7 @@ class Jaywalker:
         self.counter_iterations = 0
 
         # --- Pedone fermo a metà strada, posizione fissa ---
-        self.jaywalker = array([self.dim_x * 0.5, self.dim_y / 4])
+        self.jaywalker = array([50+20, self.dim_y / 4])
         self.jaywalker_speed = 0.0
         self.jaywalker_dir = 0
         self.jaywalker_max = self.jaywalker + self.jaywalker_r
@@ -413,9 +413,9 @@ class Jaywalker:
         lane = self.lanes_y[1]
         self.obstacles.append({
             'type': 'car',
-            'pos': array([65, lane]),
+            'pos': array([self.jaywalker[0]+20, lane]),
             'r': 2.0,
-            'v': 0.5
+            'v': 2
         })
 
         # Stato iniziale
@@ -526,7 +526,6 @@ class Jaywalker:
         plt.xlim(-1, self.dim_x+1)
         plt.ylim(-1, self.dim_y+1)
         plt.pause(0.001)
-
 
 
 class Q_Network(nn.Module):
@@ -745,6 +744,7 @@ class QAgent():
         self.train_start = train_start
 
         self.memory = deque(maxlen=memory_length)
+        #self.memory = PrioritizedReplayBuffer(capacity=memory_length)
 
         self.model = network(self.state_size, self.action_size, hidden, learning_rate, weights)
         self.target_model = network(self.state_size, self.action_size, hidden, learning_rate, weights)
@@ -770,6 +770,9 @@ class QAgent():
             
     def add_experience(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
+        # in case of prioritized replay
+        #experience = (state, action, reward, next_state, done)
+        #self.memory.add(experience, priority=1.0)  # Default priority of 1.0
 
 
     def act(self, state):
@@ -884,6 +887,8 @@ class QAgent():
             return
         
         batch = random.sample(self.memory, self.batch_size)
+        #batch, indices, weights = self.memory.sample(self.batch_size)
+        #weights = torch.tensor(weights, device=device).unsqueeze(1)  # Convert to tensor and add dimension for broadcasting
         
         for i in np.arange(self.batch_size):
             self.state_batch[i,:] = batch[i][0]
@@ -904,7 +909,18 @@ class QAgent():
         predicted_values = self.model(self.state_batch).gather(1,action_batch).squeeze()
 
         self.model.learn(predicted_values, target_values)
-        
+
+        # in case of prioritized replay
+        #td_error = predicted_values - target_values
+        #loss = (weights * td_error ** 2).mean()  # loss pesata
+
+        #self.model.optimizer.zero_grad()
+        #loss.backward()
+        #self.model.optimizer.step()
+
+        #new_priorities = td_error.abs().detach().mean(dim=1).cpu().numpy() + 1e-6
+        #self.memory.update_priorities(indices, new_priorities)
+
         self.model.eval()
 
     
@@ -1136,7 +1152,7 @@ def main_body(network, env, learning_rate, batch_size, hidden, slack, epsilon_st
 if __name__ == "__main__":
     
     env = Jaywalker()
-    episodes = 3000
+    episodes = 10000
     replay_frequency = 3
     gamma = 0.95
     learning_rate = 1e-2 #5e-4
@@ -1146,7 +1162,7 @@ if __name__ == "__main__":
     batch_size = 256
     train_start = 1000
     target_model_update_rate = 1e-3
-    memory_length = 10000 #100000
+    memory_length = 75000
     mini_batches = 4
     branch_size = 256
     slack = 0.1
@@ -1158,7 +1174,7 @@ if __name__ == "__main__":
 
     network_type = sys.argv[1]
 
-     # print used device
+    # print used device
     print(f"Device: {device}")
 
     #p = Pool(32)

@@ -74,8 +74,8 @@ def array(*args, **kwargs):
 class Car:
     def __init__(self, position):
         # distanze dal centro delle route anteriori e posteriori
-        self.lf = 0.5 #1
-        self.lr = 0.5 #1
+        self.lf = 1
+        self.lr = 1
 
         self.max_speed = 20.0
         #self.prev_position = np.zeros(2)
@@ -136,15 +136,12 @@ class Jaywalker:
         self.max_j_speed = 0.5
         self.jaywalker_speed = 0.0 
         self.jaywalker_dir = 1 
-
-        self.env_type = 1 #default enviroment, easy scenario -> car far away and still jaywalker
-
+        
         #modifiche per curriculum
         self.curriculum_stage = 1
 
         #modifiche per rallebntamento avversario
         self.completed_mean = 0.0
-        
 
         if not hasattr(self, 'car_img'):
             self.car_img = mpimg.imread(".car/carontop.png")  # ← metti il file nella stessa cartella
@@ -152,7 +149,7 @@ class Jaywalker:
 
         self.reward_size = 3
 
-        self.dim_x = 100
+        self.dim_x = 120
         self.dim_y = 10
 
         #modifiche per aggiunta dinamica di ostacoli
@@ -172,7 +169,7 @@ class Jaywalker:
 
         #self.df = [-np.pi/9, -np.pi/18, 0, np.pi/18, np.pi/9]
         self.df = [-np.pi/18, 0, np.pi/18]
-        self.a = [-7, 0, 2]
+        self.a = [-2, 0, 2]
         self.actions = [p for p in itertools.product(self.df, self.a)]
 
         self.num_df_actions = len(self.df)
@@ -181,7 +178,7 @@ class Jaywalker:
         self.state_size = 8
         self.action_size = self.num_df_actions * self.num_a_actions
 
-        self.max_iterations = 15000 # 100
+        self.max_iterations = 15000
 
         self.car = Car(array([0.0,2.5]))
 
@@ -250,12 +247,12 @@ class Jaywalker:
         distance = np.linalg.norm(vector_to_jaywalker)
 
         if self.car.position[0] >= self.jaywalker[0] or distance > self.sight:
-            return 0, -np.pi
+            return 0, -np.pi, float('inf')
 
         angle = np.arctan2(vector_to_jaywalker[1], vector_to_jaywalker[0])
         inv_distance = 1 / distance
 
-        return inv_distance, angle
+        return inv_distance, angle, distance
 
 
     def vision_obstacle(self):
@@ -283,18 +280,10 @@ class Jaywalker:
         return inv_distance, angle
 
 
-    def is_own_lane_blocked(self, threshold=15.0):
-        car_lane_y = self.lanes_y[min(range(len(self.lanes_y)), key=lambda i: abs(self.car.position[1] - self.lanes_y[i]))]
-        for obs in self.obstacles:
-            if abs(obs['pos'][1] - car_lane_y) < self.lane_width / 2:
-                if 0 < obs['pos'][0] - self.car.position[0] < threshold:
-                    return True
-        return False
-
 
     def step(self, action):
 
-        # # MODIFICHE PER MOVIMENTO JAYWALKER
+        # MODIFICHE PER MOVIMENTO JAYWALKER
         self.jaywalker[1] += self.jaywalker_speed * self.jaywalker_dir
         # -- se il pedone esce dalla corsia sbuca da sotto  
         if self.jaywalker[1] < 0 or self.jaywalker[1] > self.dim_y:
@@ -307,24 +296,22 @@ class Jaywalker:
         self.jaywalker_max = self.jaywalker + self.jaywalker_r
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
-        df, a = self.actions[action]
-        self.car.move(df, a) 
-
-        reward = np.zeros(self.reward_size)
-        terminated = False
-        completed = False
 
         #modifiche per aggiunta dinamica di ostacoli
         for obs in self.obstacles:
             obs['pos'][0] -= obs['v']  # si muovono verso sinistra
 
+        df, a = self.actions[action]
+        self.car.move(df, a) # default ripropaga l'accellerazione, altrimenti la modifico
+
+        reward = np.zeros(self.reward_size)
+        terminated = False
+        completed = False
+
         if self.collision_with_jaywalker(): # collision with jaywalker
-            reward[0] = -10 # 10
+            reward[0] = -10
             terminated = True
 
-        if self.collision_with_obstacle(): # collision with jaywalker
-            reward[0] = -10 # 10
-            terminated = True
 
         # distance from target
         reward[1] = (self.car.position[0] - self.car.prev_position[0])/self.scale_factor
@@ -338,22 +325,32 @@ class Jaywalker:
 
         # collision with borders
         if self.car.front[1] > self.dim_y or self.car.front[1] < 0 or self.car.back[1] > self.dim_y or self.car.back[1] < 0 or self.car.position[0] < 0 or self.car.front[0] < 0:
-            reward[2] -= 1000 # 100
-            terminated = True
-        else:  
+            reward[2] -= 1000
+            terminated = True 
+        # distance from center of own lane
+        else:
+            # computes a distance-based penalty to encourage the car to stay centered in its lane
             reward[2] = -np.abs(self.car.position[1] - self.goal[1])
 
         reward[2] /= self.scale_factor * 10
 
-        inv_distance, angle = self.vision()
 
-        if self.is_own_lane_blocked():
+        inv_distance, angle, jaywalker_distance = self.vision()
+
+        # Find closest object
+        obs_distance = float('inf')
+        if self.obstacles:
+            obs_distances = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
+            obs_distance = min(obs_distances)
+        
+        # Call  vision_obstacle if jaywalker is detected or closest obstacle is closer than jaywalker
+        if jaywalker_distance < float('inf') or obs_distance < jaywalker_distance:
             inv_distance_obs, angle_obs = self.vision_obstacle()
         else:
-            inv_distance_obs, angle_obs = 0.0, -np.pi
+            inv_distance_obs, angle_obs = 0, -np.pi
 
 
-        # trova ostacolo più vicino
+        
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
         obs = self.obstacles[i_min]
@@ -370,11 +367,18 @@ class Jaywalker:
             float(lane_idx)
         ])
 
+        min_dist = 1 / inv_d_obs
+
+
         self.counter_iterations += 1
         truncated = False
 
         if self.counter_iterations >= self.max_iterations:
             truncated = True
+
+        if self.collision_with_obstacle():
+            reward[0] -= 10
+            terminated = True
 
         return state, reward, terminated, truncated, completed
 
@@ -394,8 +398,8 @@ class Jaywalker:
 
         # # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
         if self.env_type == 1:
-            pos_x = self.dim_x + 100  # molto lontano dal pedone
-            speed = 0.0         # lento
+            pos_x = 100  # molto lontano dal pedone
+            speed = 0.5      # lento
             self.jaywalker_speed = 0.0
             self.jaywalker_dir = 0
 
@@ -431,7 +435,7 @@ class Jaywalker:
         })
 
         # Stato iniziale
-        inv_distance, angle = self.vision()
+        inv_distance, angle, _ = self.vision()
         dists = [np.linalg.norm(obs['pos'] - self.car.position) for obs in self.obstacles]
         i_min = np.argmin(dists)
         obs = self.obstacles[i_min]
@@ -485,19 +489,15 @@ class Jaywalker:
                  color='white', linewidth=1,
                  linestyle=(0, (10, 10))) 
 
-        #PEDONE COME CERCHIO ROSSO
-        half_side = self.jaywalker_r
-        bottom_left_corner = self.jaywalker - half_side
-        square_j = mpatches.Rectangle(bottom_left_corner, 2 * half_side, 2.5 * half_side, color='red', alpha=0.5)
-        plt.gca().add_patch(square_j)
+         #PEDONE COME CERCHIO ROSSO
+        circle_j = plt.Circle(self.jaywalker, self.jaywalker_r, color='red', alpha=0.5)
+        plt.gca().add_patch(circle_j)
 
-       #GLI OSTACOLI POSSONO ESSERE MACCHINE (ARANCIONI)
+      #GLI OSTACOLI POSSONO ESSERE MACCHINE (ARANCIONI)
         for obs in getattr(self, 'obstacles', []):
             c = 'orange' if obs['type']=='car' else 'green'
-            half_side = obs['r']
-            bottom_left_corner = obs['pos'] - half_side
-            square_o = mpatches.Rectangle(bottom_left_corner, 2 * half_side, 2 * half_side, color=c, alpha=0.5)
-            plt.gca().add_patch(square_o)
+            circle_o = plt.Circle(obs['pos'], obs['r'], color=c, alpha=0.5)
+            plt.gca().add_patch(circle_o)
 
         car = self.car
         car_length = 3.0
