@@ -144,7 +144,7 @@ class Jaywalker:
         self.completed_mean = 0.0
 
         if not hasattr(self, 'car_img'):
-            self.car_img = mpimg.imread(".car/carontop.png")  # ← metti il file nella stessa cartella
+            self.car_img = mpimg.imread("../.car/carontop.png")  # ← metti il file nella stessa cartella
 
 
         self.reward_size = 3
@@ -396,43 +396,51 @@ class Jaywalker:
         self.jaywalker_max = self.jaywalker + self.jaywalker_r
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
+        lane = self.lanes_y[1]
+
         # # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
         if self.env_type == 1:
             pos_x = 100  # molto lontano dal pedone
             speed = 0.5      # lento
             self.jaywalker_speed = 0.0
             self.jaywalker_dir = 0
+            self.obstacles.append({ 
+                'type': 'car',
+                'pos': array([pos_x, lane]),
+                'r': 2.0,
+                'v': speed
+            })
 
         # # # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
         elif self.env_type == 2:
             pos_x = self.jaywalker[0] + 5  # vicino al pedone
             speed = 1     
             self.jaywalker_speed = 0.0
-            self.jaywalker_dir = 0              
-
-        # # # --- Scenario 3: jaywalker in movimento, macchina distante ---
-        elif self.env_type == 3:
-            pos_x = self.dim_x + 100  # molto lontano dal pedone
-            speed = 0.5         # lento
-            self.jaywalker_speed = 1.0
-            self.jaywalker_dir = random.choice([-1, 1])  # direzione casuale
+            self.jaywalker_dir = 0
+            self.obstacles.append({ 
+                'type': 'car',
+                'pos': array([pos_x, lane]),
+                'r': 2.0,
+                'v': speed
+            })           
         
-        # # # --- Scenario 4: jaywalker in movimento, macchina vicina ---
-        elif self.env_type == 4:
-            pos_x = self.jaywalker[0] + 5
-            speed = 1            
-            self.jaywalker_speed = 1.0
-            self.jaywalker_dir = random.choice([-1, 1])  # direzione casuale
-
-   
-        # Auto ostacolante nella corsia di sorpasso
-        lane = self.lanes_y[1]
-        self.obstacles.append({
-            'type': 'car',
-            'pos': array([pos_x, lane]),
-            'r': 2.0,
-            'v': speed
-        })
+        # # # --- Scenario 3: due ostacoli (sorpasso critico) ---
+        elif self.env_type == 3:
+            speed = 4 
+            #first car
+            self.obstacles.append({ 
+                'type': 'car',
+                'pos': array([120, lane]),
+                'r': 2.0,
+                'v': 2
+            })
+            #second car
+            self.obstacles.append({ 
+                'type': 'car',
+                'pos': array([80, lane]),
+                'r': 2.0,
+                'v': 2
+            })
 
         # Stato iniziale
         inv_distance, angle, _ = self.vision()
@@ -1223,8 +1231,6 @@ if __name__ == "__main__":
     elif env_type == "3": #very hard enviroment: jaywalker moving and car far away
         env_type = 3
 
-    elif env_type == "4": #very very hard enviroment: jaywalker moving and car close 
-        env_type = 4
     else:
         raise ValueError("enviroment type " + env_type + " unknown:\n" + "1 -> jaywalker still and car far away \n2 -> jaywalker still and car close\n3 -> jaywalker moving and car far away\n4 -> jaywalker moving and car close")
     

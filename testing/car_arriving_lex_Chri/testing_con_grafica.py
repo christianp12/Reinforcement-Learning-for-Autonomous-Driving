@@ -184,7 +184,7 @@ class Jaywalker:
 
         self.noise = 1e-5
         self.sight = 40
-        self.sight_obstacle = 90
+        self.sight_obstacle = 70
 
         self.scale_factor = 100
 
@@ -1216,7 +1216,7 @@ if __name__ == "__main__":
     
 
     agent.test_model(
-        model_path="best_model_episode_2895.pt",
+        model_path="one_scenario_best_model_episode2208_0_1.03_0_1.pt",
         num_episodes=6,
         render=True
     )
