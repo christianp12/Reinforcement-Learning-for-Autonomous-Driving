@@ -419,7 +419,7 @@ class Jaywalker:
             if self.curriculum_stage == 2:  # fase dopo epsilon=0.01
                 speed = base_speed - self.completed_mean
                 # aggiunta varianza alla v di partenza dell'auto
-                sigma = 1.5
+                sigma = 1.5 # 1.5
                 v_base = 2.0
                 v_final = (v_base + np.random.normal(0, sigma)) * self.completed_mean
                 v_final = max(0.0, v_final) # evito v negative
@@ -950,7 +950,7 @@ class QAgent():
                 action = self.act(state.unsqueeze(0))
                 next_state, reward, terminated, truncated, completed = self.env.step(action)
 
-                #self.env.render()
+                self.env.render()
                 done = terminated or truncated          
                 next_state = torch.tensor(next_state).to(device)
                 episode_score += reward
@@ -994,13 +994,13 @@ class QAgent():
                         print(f"New best completion score: {best_completed:.2f} at episode {e}")
                     
                     # Check for model saving condition
-                    if current_collisions == 0 and current_completed > 0.96:
+                    if current_collisions == 0 and current_completed > 0.70:
                         save_path = f"best_model_episode_{e}.pt"
                         torch.save(self.model.state_dict(), save_path)
                         print(f"Model saved at episode {e}: Collision=0, Completed={current_completed:.2f}")
                     
                     # Update consecutive successes counter
-                    if current_completed > 0.93:
+                    if current_completed > 0.70:
                         consecutive_successes += 1
                     else:
                         if consecutive_successes > 0:

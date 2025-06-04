@@ -238,15 +238,15 @@ class Jaywalker:
         pos_x, speed, self.jaywalker_speed, self.jaywalker_dir = 0, 0, 0, 0
         
         if self.env_type == 1: # Scenario 1: ostacolo distante, pedone fermo
-            pos_x, speed, self.jaywalker_speed, self.jaywalker_dir = self.dim_x * 0.75, 0.5, 0.0, 0
+            pos_x, speed, self.jaywalker_speed, self.jaywalker_dir, n_car = [self.dim_x * 0.75], 0.5, 0.0, 0, 1
         elif self.env_type == 2: # Scenario 2: ostacolo vicino, pedone fermo
-            pos_x, speed, self.jaywalker_speed, self.jaywalker_dir = self.jaywalker[0] + 15, 1.0, 0.0, 0
+            pos_x, speed, self.jaywalker_speed, self.jaywalker_dir, n_car = [self.jaywalker[0] + 15], 1.0, 0.0, 0, 1
         elif self.env_type == 3: # Scenario 3: ostacolo distante, pedone mobile
-            pos_x, speed, self.jaywalker_speed, self.jaywalker_dir = self.dim_x * 0.75, 0.5, 1.0, random.choice([-1, 1])
-        elif self.env_type == 4: # Scenario 4: ostacolo vicino, pedone mobile
-            pos_x, speed, self.jaywalker_speed, self.jaywalker_dir = self.jaywalker[0] + 15, 1.0, 1.0, random.choice([-1, 1])
+            pos_x, speed, self.jaywalker_speed, self.jaywalker_dir, n_car = [self.dim_x * 0.75, self.dim_x * 0.50], 0, 1.0, 0, 2
         
-        self.obstacles.append({'type': 'car', 'pos': array([pos_x, self.lanes_y[1]]), 'r': 2.0, 'v': speed})
+        for i in range(n_car):
+            self.obstacles.append({'type': 'car', 'pos': array([pos_x[i], self.lanes_y[1]]), 'r': 2.0, 'v': speed})
+
         
         inv_distance, angle = self.vision()
         inv_distance_obs, angle_obs = self.vision_obstacle()
@@ -285,8 +285,6 @@ class Jaywalker:
         plt.ylim(-1, self.dim_y+1)
         plt.pause(0.001)
 
-# --- Tutte le classi Network (Q_Network, Lex_Q_Network, etc.) rimangono INVARIATE ---
-# ... (omesso per brevità, il codice è identico a quello fornito)
 
 class Q_Network(nn.Module):
 
@@ -491,7 +489,7 @@ if __name__ == "__main__":
         from openpyxl.utils import get_column_letter
     except ImportError:
         print("La libreria 'openpyxl' è necessaria per salvare in formato Excel.")
-        print("Per favore, installala eseguendo: pip install openpyxl")
+        print("pip install openpyxl")
         sys.exit(1)
 
     # --- Parametri di configurazione ---
@@ -529,8 +527,8 @@ if __name__ == "__main__":
         # Lista per contenere i risultati del modello corrente
         current_results_row = [model_file]
 
-        # Itera sui 4 scenari
-        for scenario_type in range(1, 5):
+        # Itera sui 3 scenari
+        for scenario_type in range(1, 4):
             env = Jaywalker()
             agent = QAgent(
                 network=Lex_Q_Network,

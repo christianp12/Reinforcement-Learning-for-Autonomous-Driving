@@ -1232,7 +1232,7 @@ if __name__ == "__main__":
                    replay_frequency, target_model_update_rate, memory_length, mini_batches, weights, env_type)
     
     agent.test_model(
-        model_path="models/alternated_2.pt",
+        model_path="../Lex.ptjaywalker_QAgent.pt",
         num_episodes=4,
         render=True
     )

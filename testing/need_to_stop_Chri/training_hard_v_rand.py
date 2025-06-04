@@ -421,8 +421,9 @@ class Jaywalker:
                 # aggiunta varianza alla v di partenza dell'auto
                 sigma = 1.5
                 v_base = 2.0
-                speed = (v_base + np.random.normal(0, sigma)) * self.completed_mean
-                speed = max(0.0, speed) # evito v negative
+                v_final = (v_base + np.random.normal(0, sigma)) * self.completed_mean
+                v_final = max(0.0, v_final) # evito v negative
+                self.car.v = v_final
             else:
                 speed = base_speed
             pos_x = self.jaywalker[0] + 20  # Default position for critical scenario
@@ -949,7 +950,7 @@ class QAgent():
                 action = self.act(state.unsqueeze(0))
                 next_state, reward, terminated, truncated, completed = self.env.step(action)
 
-                self.env.render()
+                #self.env.render()
                 done = terminated or truncated          
                 next_state = torch.tensor(next_state).to(device)
                 episode_score += reward

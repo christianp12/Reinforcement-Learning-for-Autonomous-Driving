@@ -420,7 +420,7 @@ class Jaywalker:
                         'type': 'car',
                         'pos': array([pos_x, self.lanes_y[1]]),
                         'r': 2.0,
-                        'v': speed  # verso sinistra
+                        'v': 1  # verso sinistra
                     })
             else:
                 # Singolo ostacolo in posizione fissa
