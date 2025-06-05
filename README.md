@@ -2,27 +2,23 @@
 
 ## Setup e Installazione
 
-1.  **Clona il Repository**:
+1.  **Clona il Repository**
 
 2.  ```
+    cd final_models/
     pip install -r requirements.txt
     ```
-### 1. `env_testing.py`
 
+
+### 1. `env_testing.py`
 * **Posizione**: `our_model/env_testing.py`
-* **Test**: Esegue `6` episodi di test.
 
 ### 2. `env_testing_v_rand.py`
-
-* **Posizione**: `v_Start_noise/env_testing_v_rand.py`
-* **Reset Ambiente**: L'auto dell'agente parte con una velocità iniziale randomizzata.
-* **Test**: Esegue `4` episodi di test.
+* **Posizione**: `our_model_varying_speed/env_testing_v_rand.py`
 
 ### 3. `env_testing_v_rand.py`
 
 * **Posizione**: `original_physical_model/env_testing_physical.py`
-* **Reset Ambiente**: L'auto dell'agente parte con una velocità iniziale randomizzata.
-* **Test**: Esegue `4` episodi di test.
 
 ## Come Eseguire gli Script
 
