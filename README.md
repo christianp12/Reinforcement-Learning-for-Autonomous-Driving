@@ -10,20 +10,17 @@
 ### 1. `env_testing.py`
 
 * **Posizione**: `our_model/env_testing.py`
-* **Modello Caricato Richiesto**: `our_model/agent_75_10k.pt`
 * **Test**: Esegue `6` episodi di test.
 
 ### 2. `env_testing_v_rand.py`
 
 * **Posizione**: `v_Start_noise/env_testing_v_rand.py`
-* **Modello Caricato Richiesto**: `v_Start_noise/agent.pt`
 * **Reset Ambiente**: L'auto dell'agente parte con una velocità iniziale randomizzata.
 * **Test**: Esegue `4` episodi di test.
 
 ### 3. `env_testing_v_rand.py`
 
-* **Posizione**: `v_Start_noise/env_testing_v_rand.py`
-* **Modello Caricato Richiesto**: `v_Start_noise/agent.pt`
+* **Posizione**: `original_physical_model/env_testing_physical.py`
 * **Reset Ambiente**: L'auto dell'agente parte con una velocità iniziale randomizzata.
 * **Test**: Esegue `4` episodi di test.
 
