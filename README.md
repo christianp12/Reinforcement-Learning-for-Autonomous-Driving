@@ -2,27 +2,27 @@
 
 ## Setup e Installazione
 
-1.  **Clona il Repository**:
+1.  **Clona il Repository**
 
 2.  ```
     pip install -r requirements.txt
+    cd final_models/
     ```
+
+## script di test per:
+
+## modello con velocità di partenza a 0
 ### 1. `env_testing.py`
-
 * **Posizione**: `our_model/env_testing.py`
-* **Test**: Esegue `6` episodi di test.
 
+## modello con velocità di partenza randomizzata
 ### 2. `env_testing_v_rand.py`
+* **Posizione**: `our_model_varying_speed/env_testing_v_rand.py`
 
-* **Posizione**: `v_Start_noise/env_testing_v_rand.py`
-* **Reset Ambiente**: L'auto dell'agente parte con una velocità iniziale randomizzata.
-* **Test**: Esegue `4` episodi di test.
-
-### 3. `env_testing_v_rand.py`
+## modello con caratteristiche fisiche aumentate
+### 3. `env_testing_physical.py`
 
 * **Posizione**: `original_physical_model/env_testing_physical.py`
-* **Reset Ambiente**: L'auto dell'agente parte con una velocità iniziale randomizzata.
-* **Test**: Esegue `4` episodi di test.
 
 ## Come Eseguire gli Script
 
@@ -32,17 +32,17 @@ Gli script vengono eseguiti dalla riga di comando e accettano un argomento numer
 
 Prima, naviga nella directory appropriata:
 
-* Per `env_testing_Menco.py`:
+* Per `env_testing.py`:
     ```bash
-    cd our_model/
+    cd final_models/our_model/
     ```
 * Per `env_testing_v_rand.py`:
     ```bash
-    cd v_Start_noise/ 
+    cd final_models/our_model_varying_speed/ 
     ```
-* Per `physical.py`:
+* Per `env_testing_physical.py`:
     ```bash
-    cd v_Start_||/ 
+    cd final_models/original_physical_model/ 
     ```
 
 Poi, esegui lo script:
