@@ -32,17 +32,17 @@ Gli script vengono eseguiti dalla riga di comando e accettano un argomento numer
 
 Prima, naviga nella directory appropriata:
 
-* Per `env_testing_Menco.py`:
+* Per `env_testing.py`:
     ```bash
-    cd our_model/
+    cd final_models/our_model/
     ```
 * Per `env_testing_v_rand.py`:
     ```bash
-    cd v_Start_noise/ 
+    cd final_models/our_model_varying_speed/ 
     ```
-* Per `physical.py`:
+* Per `env_testing_physical.py`:
     ```bash
-    cd v_Start_||/ 
+    cd final_models/original_physical_model/ 
     ```
 
 Poi, esegui lo script:
