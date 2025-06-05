@@ -200,7 +200,7 @@ class Jaywalker:
         self.velocity_history = []
         self.time_history = []
         self.current_time = 0
-        self.max_time_display = 100  # Mostra gli ultimi 100 step temporali
+        self.max_time_display = 50  # Mostra gli ultimi 50 step temporali
         self.max_velocity_display = 25  # Scala massima per la velocità
 
 

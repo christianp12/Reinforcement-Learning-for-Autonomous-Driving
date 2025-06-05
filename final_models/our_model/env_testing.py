@@ -114,10 +114,8 @@ class Car:
         self.position = position
         self.prev_position = np.copy(position)
 
-        self.v = random.uniform(0.0, 20)  # velocità iniziale casuale tra 0 e 1
-        #self.v = 0.0
+        self.v = 0
 
-        
         self.phi = 0
         self.beta = 0
 
@@ -132,6 +130,9 @@ class Car:
 class Jaywalker:
 
     def __init__(self):
+
+        #modifiche per iterazione su scenari
+        self.iter = False
 
         # MODIFICHE MOVIMENTO JAYWALKER
         self.min_j_speed = 0.1
@@ -194,6 +195,13 @@ class Jaywalker:
         self.sight_obstacle = 80
 
         self.scale_factor = 100
+
+        # modifiche per grafico v
+        self.velocity_history = []
+        self.time_history = []
+        self.current_time = 0
+        self.max_time_display = 50  # Mostra gli ultimi 50 step temporali
+        self.max_velocity_display = 25  # Scala massima per la velocità
 
 
     def collision_with_jaywalker(self):
@@ -298,6 +306,10 @@ class Jaywalker:
         self.jaywalker_max = self.jaywalker + self.jaywalker_r
         self.jaywalker_min = self.jaywalker - self.jaywalker_r
 
+        if len(self.velocity_history) > self.max_time_display:
+            self.velocity_history.pop(0)
+            self.time_history.pop(0)
+
 
         #modifiche per aggiunta dinamica di ostacoli
         for obs in self.obstacles:
@@ -306,6 +318,10 @@ class Jaywalker:
         df, a = self.actions[action]
         self.car.move(df, a) # default ripropaga l'accellerazione, altrimenti la modifico
 
+        self.current_time += 1
+        self.velocity_history.append(self.car.v)
+        self.time_history.append(self.current_time)
+        
         reward = np.zeros(self.reward_size)
         terminated = False
         completed = False
@@ -369,9 +385,6 @@ class Jaywalker:
             float(lane_idx)
         ])
 
-        min_dist = 1 / inv_d_obs
-
-
         self.counter_iterations += 1
         truncated = False
 
@@ -387,11 +400,17 @@ class Jaywalker:
 
     def reset(self):
 
+        # reset dati graficali
+        self.velocity_history = []
+        self.time_history = []
+        self.current_time = 0
+        
         self.obstacles = []
 
 
         self.car.reset(array([0.0, 2.5]))
         self.counter_iterations = 0
+
 
         # --- Pedone fermo a metà strada, posizione fissa ---
         self.jaywalker = array([self.dim_x * 0.5, self.dim_y / 4])
@@ -428,7 +447,7 @@ class Jaywalker:
         
         # # # --- Scenario 3: due ostacoli (sorpasso critico) ---
         elif self.env_type == 3:
-            speed = 4 
+            speed = 2 #4 
             #first car
             self.obstacles.append({ 
                 'type': 'car',
@@ -455,6 +474,12 @@ class Jaywalker:
 
         inv_distance_obs, angle_obs = 0.0, -np.pi
 
+        # modifiche per iterazioni
+        if self.iter:
+            if self.env_type == 3:
+                self.env_type = 0
+            self.env_type += 1
+
         return array([
             self.car.position[1],
             inv_distance,
@@ -475,46 +500,59 @@ class Jaywalker:
     def __str__(self):
         return "jaywalker"
     
-    #MODIFICHE PER VEDERE GLI OSTACOLI
     def render(self):
-        plt.clf()
-        ax = plt.gca()
+        # Crea una figura con due subplot: strada sopra, grafico sotto
+        if not hasattr(self, 'fig'):
+        # Crea la figura solo la prima volta
+            self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(12, 10), 
+                gridspec_kw={'height_ratios': [2, 1], 'hspace': 0.3})
+            plt.ion()
+            plt.show()
+        
+        ax1 = self.ax1
+        ax2 = self.ax2
+        # ========== SUBPLOT 1: VISUALIZZAZIONE STRADA ==========
+        ax1.clear()
+        
+        # Sfondo strada nero
         road = mpatches.Rectangle((0, 0), self.dim_x, self.dim_y,
-                                  facecolor='black', edgecolor='none')
-        ax.add_patch(road)
+                                facecolor='black', edgecolor='none')
+        ax1.add_patch(road)
 
+        # Linea di arrivo verde tratteggiata
         gx = self.goal[0]
-        ax.plot([gx, gx], [0, self.dim_y],
-            color='lime', linewidth=2,
-            linestyle=(0, (5, 5)),
-            label='Finish')
+        ax1.plot([gx, gx], [0, self.dim_y],
+                color='lime', linewidth=3,
+                linestyle=(0, (5, 5)),
+                label='Finish')
 
-        # 2) linee di bordo continue – bianche
-        plt.plot([0, self.dim_x], [0, 0], color='white', linewidth=2)
-        plt.plot([0, self.dim_x], [self.dim_y, self.dim_y], color='white', linewidth=2)
+        # Linee di bordo continue bianche
+        ax1.plot([0, self.dim_x], [0, 0], color='white', linewidth=2)
+        ax1.plot([0, self.dim_x], [self.dim_y, self.dim_y], color='white', linewidth=2)
 
-        # 3) linea centrale tratteggiata – bianca
+        # Linea centrale tratteggiata bianca
         mid_y = self.dim_y / 2
-        plt.plot([0, self.dim_x], [mid_y, mid_y],
-                 color='white', linewidth=1,
-                 linestyle=(0, (10, 10))) 
+        ax1.plot([0, self.dim_x], [mid_y, mid_y],
+                color='white', linewidth=1,
+                linestyle=(0, (10, 10))) 
 
-         #PEDONE COME CERCHIO ROSSO
-        circle_j = plt.Circle(self.jaywalker, self.jaywalker_r, color='red', alpha=0.5)
-        plt.gca().add_patch(circle_j)
+        # Pedone come cerchio rosso
+        circle_j = plt.Circle(self.jaywalker, self.jaywalker_r, color='red', alpha=0.7)
+        ax1.add_patch(circle_j)
 
-      #GLI OSTACOLI POSSONO ESSERE MACCHINE (ARANCIONI)
+        # Ostacoli (macchine arancioni)
         for obs in getattr(self, 'obstacles', []):
-            c = 'orange' if obs['type']=='car' else 'green'
-            circle_o = plt.Circle(obs['pos'], obs['r'], color=c, alpha=0.5)
-            plt.gca().add_patch(circle_o)
+            c = 'orange' if obs['type'] == 'car' else 'green'
+            circle_o = plt.Circle(obs['pos'], obs['r'], color=c, alpha=0.6)
+            ax1.add_patch(circle_o)
 
+        # Auto del giocatore
         car = self.car
         car_length = 3.0
         car_width = 3.0
         arg = car.phi + car.beta
 
-# Coordinate per posizionare l'immagine
+        # Coordinate per posizionare l'immagine
         extent = [
             car.position[0] - car_length / 2,
             car.position[0] + car_length / 2,
@@ -522,16 +560,93 @@ class Jaywalker:
             car.position[1] + car_width / 2
         ]
 
-# Trasformazione per ruotare l'immagine
+        # Trasformazione per ruotare l'immagine
         img_transform = transforms.Affine2D().rotate_around(
             car.position[0], car.position[1], arg
-        ) + plt.gca().transData
+        ) + ax1.transData
 
-# Mostra immagine dell’auto
-        plt.imshow(self.car_img, extent=extent, transform=img_transform, zorder=5)
+        # Mostra immagine dell'auto
+        ax1.imshow(self.car_img, extent=extent, transform=img_transform, zorder=5)
         
-        plt.xlim(-1, self.dim_x+1)
-        plt.ylim(-1, self.dim_y+1)
+        ax1.set_xlim(-1, self.dim_x+1)
+        ax1.set_ylim(-1, self.dim_y+1)
+        ax1.set_title('Simulazione Guida Autonoma', fontsize=14, fontweight='bold')
+        ax1.set_xlabel('Posizione X')
+        ax1.set_ylabel('Posizione Y')
+        
+        # ========== SUBPLOT 2: GRAFICO VELOCITÀ ==========
+        ax2.clear()
+        
+        if len(self.velocity_history) > 1:
+            # Crea il grafico della velocità con colori gradienti
+            time_array = np.array(self.time_history)
+            velocity_array = np.array(self.velocity_history)
+            
+            # Colori diversi in base alla velocità
+            colors = []
+            for v in velocity_array:
+                if v < 5:
+                    colors.append('#00ff00')  # Verde per velocità basse
+                elif v < 15:
+                    colors.append('#ffff00')  # Giallo per velocità medie
+                else:
+                    colors.append('#ff0000')  # Rosso per velocità alte
+            
+            # Disegna il grafico a linee
+            ax2.plot(time_array, velocity_array, 
+                    color='#1f77b4', linewidth=2.5, alpha=0.8)
+            
+            # Aggiungi punti colorati
+            ax2.scatter(time_array, velocity_array, 
+                    c=colors, s=30, alpha=0.7, edgecolors='black', linewidth=0.5)
+            
+            # Riempi l'area sotto la curva con gradiente
+            ax2.fill_between(time_array, velocity_array, alpha=0.3, 
+                            color='#1f77b4', interpolate=True)
+        
+        # Configurazione assi del grafico
+        if len(self.time_history) > 0:
+            ax2.set_xlim(max(0, self.current_time - self.max_time_display), 
+                        max(self.max_time_display, self.current_time))
+        else:
+            ax2.set_xlim(0, self.max_time_display)
+        
+        ax2.set_ylim(-self.max_velocity_display, self.max_velocity_display)
+        
+        # Linee di riferimento
+        ax2.axhline(y=0, color='gray', linestyle='-', alpha=0.3)
+        ax2.axhline(y=self.car.max_speed, color='red', linestyle='--', alpha=0.5, label=f'Max Speed ({self.car.max_speed})')
+        ax2.axhline(y=-self.car.max_speed, color='red', linestyle='--', alpha=0.5)
+        
+        # Griglia
+        ax2.grid(True, alpha=0.3, linestyle=':')
+        
+        # Etichette e titolo
+        ax2.set_xlabel('Tempo (steps)', fontsize=12)
+        ax2.set_ylabel('Velocità', fontsize=12)
+        ax2.set_title(f'Velocità in Tempo Reale - Attuale: {self.car.v:.2f}', 
+                    fontsize=12, fontweight='bold')
+        
+        # Aggiungi valore corrente come testo
+        if len(self.velocity_history) > 0:
+            current_v = self.velocity_history[-1]
+            ax2.text(0.02, 0.95, f'V = {current_v:.2f}', 
+                    transform=ax2.transAxes, fontsize=14, fontweight='bold',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='yellow', alpha=0.7))
+        
+        # Legenda per i colori della velocità
+        from matplotlib.lines import Line2D
+        legend_elements = [
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='#00ff00', 
+                markersize=8, label='Bassa (< 5)'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='#ffff00', 
+                markersize=8, label='Media (5-15)'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='#ff0000', 
+                markersize=8, label='Alta (> 15)')
+        ]
+        ax2.legend(handles=legend_elements, loc='upper right', fontsize=10)
+        
+        plt.tight_layout()
         plt.pause(0.001)
 
 
@@ -735,6 +850,11 @@ class QAgent():
 
         #modifiche per env testing
         self.env.env_type = env_type
+        if env_type == 4:
+            self.env.iter = True
+            self.env.env_type = 1 # start iteration
+        else:
+            self.env.env_type = env_type
 
         self.permissible_actions = torch.tensor(range(self.action_size)).to(device)
 
@@ -1232,7 +1352,9 @@ if __name__ == "__main__":
 
     elif env_type == "3": #very hard enviroment: jaywalker moving and car far away
         env_type = 3
-
+    
+    elif env_type == "4": #showing every enviroment sequentially
+        env_type = 4
     else:
         raise ValueError("enviroment type " + env_type + " unknown:\n" + "1 -> jaywalker still and car far away \n2 -> jaywalker still and car close\n3 -> jaywalker moving and car far away\n4 -> jaywalker moving and car close")
     
@@ -1241,6 +1363,6 @@ if __name__ == "__main__":
     
     agent.test_model(
         model_path="agent_75_10k.pt",
-        num_episodes=100,
+        num_episodes=6,
         render=True
     )
