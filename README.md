@@ -11,15 +11,15 @@
 
 ## script di test per:
 
-* modello con velocità di partenza a 0
+## modello con velocità di partenza a 0
 ### 1. `env_testing.py`
 * **Posizione**: `our_model/env_testing.py`
 
-* modello con velocità di partenza randomizzata
+## modello con velocità di partenza randomizzata
 ### 2. `env_testing_v_rand.py`
 * **Posizione**: `our_model_varying_speed/env_testing_v_rand.py`
 
-* modello con caratteristiche fisiche aumentate
+## modello con caratteristiche fisiche aumentate
 ### 3. `env_testing_physical.py`
 
 * **Posizione**: `original_physical_model/env_testing_physical.py`
