@@ -422,7 +422,7 @@ class Jaywalker:
                 sigma = 1.5 # 1.5
                 v_base = 2.0
                 v_final = (v_base + np.random.normal(0, sigma)) * self.completed_mean
-                v_final = max(0.0, v_final) # evito v negative
+                v_final = max(0.0, v_final) # no v negative
                 self.car.v = v_final
             else:
                 speed = base_speed

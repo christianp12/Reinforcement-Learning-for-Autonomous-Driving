@@ -428,7 +428,7 @@ class Jaywalker:
 
         # # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
         if self.env_type == 1:
-            pos_x = self.dim_x + 100  # lontano dal pedone
+            pos_x = self.dim_x - 80  # lontano dal pedone
             speed = 0.5      # lento
             self.jaywalker_speed = 0.0
             self.jaywalker_dir = 0
