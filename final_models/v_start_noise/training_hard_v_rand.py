@@ -994,7 +994,7 @@ class QAgent():
                         print(f"New best completion score: {best_completed:.2f} at episode {e}")
                     
                     # Check for model saving condition
-                    if current_collisions == 0 and current_completed > 0.70:
+                    if current_completed > 0.70:
                         save_path = f"best_model_episode_{e}.pt"
                         torch.save(self.model.state_dict(), save_path)
                         print(f"Model saved at episode {e}: Collision=0, Completed={current_completed:.2f}")

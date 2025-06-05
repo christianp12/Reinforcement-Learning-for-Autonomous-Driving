@@ -428,7 +428,7 @@ class Jaywalker:
 
         # # --- Scenario 1: ostacolo distante (sorpasso possibile) ---
         if self.env_type == 1:
-            pos_x = 100  # molto lontano dal pedone
+            pos_x = self.dim_x + 100  # lontano dal pedone
             speed = 0.5      # lento
             self.jaywalker_speed = 0.0
             self.jaywalker_dir = 0
@@ -441,7 +441,7 @@ class Jaywalker:
 
         # # # --- Scenario 2: ostacolo vicino (sorpasso critico) ---
         elif self.env_type == 2:
-            pos_x = self.jaywalker[0] + 5  # vicino al pedone
+            pos_x = self.jaywalker[0] + 20  # Default position for critical scenario
             speed = 1     
             self.jaywalker_speed = 0.0
             self.jaywalker_dir = 0
@@ -1369,7 +1369,7 @@ if __name__ == "__main__":
                    replay_frequency, target_model_update_rate, memory_length, mini_batches, weights, env_type)
     
     agent.test_model(
-        model_path="agent_75_10k.pt",
-        num_episodes=6,
+        model_path="agent.pt",
+        num_episodes=4,
         render=True
     )
