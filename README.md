@@ -3,22 +3,10 @@
 ## Setup e Installazione
 
 1.  **Clona il Repository**:
-    Per prima cosa, clona questo repository sulla tua macchina locale (se non l'hai già fatto).
 
-2.  **Installa le Dipendenze**:
-    Assicurati di avere Python 3.x installato. Poi, naviga nella directory root del repository clonato ed esegui il seguente comando per installare tutte le librerie necessarie:
-    ```bash
+2.  ```
     pip install -r requirements.txt
     ```
-
-3.  **Struttura dei File Richiesti**:
-    * Gli script si aspettano un'immagine per l'auto del giocatore. Assicurati che il file `carontop.png` sia presente in una directory `.car` alla radice del progetto: `/.car/carontop.png`.
-    * I modelli pre-addestrati (`.pt`) devono trovarsi nelle rispettive directory degli script che li utilizzano (vedi sotto).
-
-## Descrizione degli Script e Posizione
-
-Entrambi gli script definiscono un ambiente di simulazione (`Jaywalker` class), un'architettura di rete neurale (`Lex_Q_Network`), e una classe `QAgent`.
-
 ### 1. `env_testing.py`
 
 * **Posizione**: `our_model/env_testing.py`
