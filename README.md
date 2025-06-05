@@ -10,17 +10,21 @@
 ### 1. `env_testing.py`
 
 * **Posizione**: `our_model/env_testing.py`
-* Questo script testa un modello pre-addestrato con condizioni iniziali dell'auto fisse.
 * **Modello Caricato Richiesto**: `our_model/agent_75_10k.pt`
-* **Reset Ambiente**: L'auto dell'agente parte da una posizione e velocità fisse.
 * **Test**: Esegue `6` episodi di test.
 
 ### 2. `env_testing_v_rand.py`
 
 * **Posizione**: `v_Start_noise/env_testing_v_rand.py`
-* Questo script testa un modello pre-addestrato con una velocità iniziale dell'auto randomizzata e lievi differenze nel posizionamento degli ostacoli rispetto a Menco.
 * **Modello Caricato Richiesto**: `v_Start_noise/agent.pt`
-* **Reset Ambiente**: L'auto dell'agente parte con una velocità iniziale leggermente randomizzata.
+* **Reset Ambiente**: L'auto dell'agente parte con una velocità iniziale randomizzata.
+* **Test**: Esegue `4` episodi di test.
+
+### 3. `env_testing_v_rand.py`
+
+* **Posizione**: `v_Start_noise/env_testing_v_rand.py`
+* **Modello Caricato Richiesto**: `v_Start_noise/agent.pt`
+* **Reset Ambiente**: L'auto dell'agente parte con una velocità iniziale randomizzata.
 * **Test**: Esegue `4` episodi di test.
 
 ## Come Eseguire gli Script
@@ -38,6 +42,10 @@ Prima, naviga nella directory appropriata:
 * Per `env_testing_v_rand.py`:
     ```bash
     cd v_Start_noise/ 
+    ```
+* Per `physical.py`:
+    ```bash
+    cd v_Start_||/ 
     ```
 
 Poi, esegui lo script:
