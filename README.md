@@ -1,57 +1,56 @@
-# Progetto di Lorenzo Menchini e Christian Petruzzella
+# Project by Lorenzo Menchini and Christian Petruzzella
 
-## Setup e Installazione
+## Setup and Installation
 
-1.  **Clona il Repository**
+1.  **Clone the Repository**
 
 2.  ```
     pip install -r requirements.txt
     cd final_models/
     ```
 
-## script di test per:
+## Test scripts for:
 
-## modello con velocità di partenza a 0
+## Model with starting speed at 0
 ### 1. `env_testing.py`
-* **Posizione**: `our_model/env_testing.py`
+* **Location**: `our_model/env_testing.py`
 
-## modello con velocità di partenza randomizzata
+## Model with randomized starting speed
 ### 2. `env_testing_v_rand.py`
-* **Posizione**: `our_model_varying_speed/env_testing_v_rand.py`
+* **Location**: `our_model_varying_speed/env_testing_v_rand.py`
 
-## modello con caratteristiche fisiche aumentate
+## Model with augmented physical characteristics
 ### 3. `env_testing_physical.py`
+* **Location**: `original_physical_model/env_testing_physical.py`
 
-* **Posizione**: `original_physical_model/env_testing_physical.py`
+## How to Run the Scripts
 
-## Come Eseguire gli Script
+The scripts are run from the command line and accept a numerical argument that specifies the test scenario.
 
-Gli script vengono eseguiti dalla riga di comando e accettano un argomento numerico che specifica lo scenario di test.
+### Command Syntax:
 
-### Sintassi del Comando:
+First, navigate to the appropriate directory:
 
-Prima, naviga nella directory appropriata:
-
-* Per `env_testing.py`:
+* For `env_testing.py`:
     ```bash
     cd final_models/our_model/
     ```
-* Per `env_testing_v_rand.py`:
+* For `env_testing_v_rand.py`:
     ```bash
-    cd final_models/our_model_varying_speed/ 
+    cd final_models/our_model_varying_speed/
     ```
-* Per `env_testing_physical.py`:
+* For `env_testing_physical.py`:
     ```bash
-    cd final_models/original_physical_model/ 
+    cd final_models/original_physical_model/
     ```
 
-Poi, esegui lo script:
+Then, run the script:
 ```bash
-python <nome_script.py> <env_type>
+python <script_name.py> <env_type>
 ```
 
-<env_type> è un numero intero da 1 a 4 che definisce lo scenario:
-* 1: Scenario Facile: Jaywalker fermo, ostacolo (auto) distante.
-* 2: Scenario Difficile: Jaywalker fermo, ostacolo (auto) vicino al jaywalker.
-* 3: Scenario Molto Difficile: Jaywalker fermo, due auto ostacolo sulla corsia.
-* 4: Iterazione Scenari: Esegue in sequenza gli scenari 1, 2, 3, ciclicamente per il numero di episodi di test.
+<env_type> is a number between 1 and 4:
+* 1: Easy Scenario: Jaywalker stationary, obstacle (car) distant.
+* 2: Difficult Scenario: Jaywalker stationary, obstacle (car) close to the jaywalker.
+* 3: Very Difficult Scenario: Jaywalker stationary, two obstacle cars in the lane.
+* 4: Scenario Iteration: Sequentially runs scenarios 1, 2, 3, cyclically for the number of test episodes.
