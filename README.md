@@ -51,7 +51,7 @@ python <nome_script.py> <env_type>
 ```
 
 <env_type> è un numero intero da 1 a 4 che definisce lo scenario:
-### 1: Scenario Facile: Jaywalker fermo, ostacolo (auto) distante.
-### 2: Scenario Difficile: Jaywalker fermo, ostacolo (auto) vicino al jaywalker.
-### 3: Scenario Molto Difficile: Jaywalker fermo, due auto ostacolo sulla corsia.
-### 4: Iterazione Scenari: Esegue in sequenza gli scenari 1, 2, 3, ciclicamente per il numero di episodi di test.
+* 1: Scenario Facile: Jaywalker fermo, ostacolo (auto) distante.
+* 2: Scenario Difficile: Jaywalker fermo, ostacolo (auto) vicino al jaywalker.
+* 3: Scenario Molto Difficile: Jaywalker fermo, due auto ostacolo sulla corsia.
+* 4: Iterazione Scenari: Esegue in sequenza gli scenari 1, 2, 3, ciclicamente per il numero di episodi di test.
