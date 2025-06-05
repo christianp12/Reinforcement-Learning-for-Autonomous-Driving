@@ -1,4 +1,4 @@
-# README: Simulatore di Guida Autonoma con Agente RL
+# Simulatore di Guida Autonoma con Agente RL
 
 Questo progetto contiene script Python per testare un agente di Reinforcement Learning (RL) in un ambiente di simulazione di guida. L'agente controlla un veicolo che deve raggiungere un obiettivo evitando collisioni con un jaywalker (pedone) e ostacoli.
 
